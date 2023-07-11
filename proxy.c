@@ -1,49 +1,134 @@
-/*
- *  module description 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include "postmaster/postmaster.c"
+
+/* 
+ *  Я запрещаю вам использовать треды!!
+ *  И посмотрите стиль кода модулей в постгресе пж
+ * 
+ *  $PGDATA="/var/lib/postgres/data"
+ *  change default port in postgresql.conf for another one
+ * 
  */
 
-#include "postgres.h"
-#include "fmgr.h"
-#include "postmaster/bgworker.h"
+#include "proxy.h"
 
-#include "proxy_server.h"
-
-PG_MODULE_MAGIC;
-
-void _PG_init(void);
-
-PGDLLEXPORT void proxy_main(Datum main_arg);
+#define BUFFER_SIZE 4096
+#define ADDR "127.0.0.1"
+#define DEFAULT_POSTGRES_PORT 5432
 
 void
-proxy_main(Datum main_arg)
+handle_client(int server_socket, int client_socket)
 {
-/*
- *  Unblocking signals from postgres processes
- */
-    BackgroundWorkerUnblockSignals();
+    char buffer[BUFFER_SIZE];
 
-/*
- *  Starting proxy server
- */
-    run_proxy();
+    /* Recieving data from client */
+    int bytes_received;
+    while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0)
+    {
+        /* add to server_log which data received */
+        /* Sending reply to the client */
+        if (send(server_socket, buffer, bytes_received, 0) == -1)
+        {
+            /* add error to proxy_log */
+            perror("Client data sending error");
+            close(client_socket);
+        }
+    }
+
+    /* doing something with the buffer */
 }
 
-void 
-_PG_init(void)
+int 
+find_postgres_server_port()
 {
-    elog(LOG, "proxy_server_bgw has began working.");
+    return PostPortNumber;
+}
 
-    BackgroundWorker proxy_bgw;
+void
+connect_postgres_server()
+{
+    int postgres_server_port = find_postgres_server_port();
+    
+    /* connect */
+}
 
-    memset(&proxy_bgw, 0, sizeof(proxy_bgw));
-    proxy_bgw.bgw_flags = BGWORKER_SHMEM_ACCESS;
-    proxy_bgw.bgw_start_time = BgWorkerStart_RecoveryFinished;
-    proxy_bgw.bgw_restart_time = BGW_NEVER_RESTART;
-    sprintf(proxy_bgw.bgw_library_name, "proxy");
-    sprintf(proxy_bgw.bgw_function_name, "proxy_main");
-    sprintf(proxy_bgw.bgw_name, "proxy_server_bgw");
-    sprintf(proxy_bgw.bgw_type, "proxy_server");
 
-    RegisterBackgroundWorker(&proxy_bgw);
-    elog(LOG, "proxy_server_bgw has been registered");
+/*
+ *  Rethink _exit() in "ifs"
+ */
+
+void 
+run_proxy()
+{
+    int server_socket, client_socket;
+    struct sockaddr_in server_address, client_address;
+    int client_address_size = sizeof(client_address);
+
+    /* Creating proxy_server socket */
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1)
+    {
+        /* add error to proxy_log */
+        perror("Proxy socket creating error");
+        exit(1);
+    }
+
+    /* Preparing proxy_server address */
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = htons(INADDR_ANY);
+    server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
+
+    /* Binding socket to proxy_server address */
+    if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
+    {
+        /* add error to proxy_log */
+        perror("Socket binding error");
+        exit(1);
+    }
+
+    /* TODO: run the function in another process */
+    connect_postgres_server();
+
+    /* Listening connection */
+    if (listen(server_socket, 10) == -1)
+    {
+        /* add error to proxy_log */
+        perror("Connection listening error");
+        exit(1);
+    }
+
+    /* do we really need it --- otherwise, add it in the proxy_log */
+    printf("The proxy server is running. Waiting for connections...\n");
+
+    /* Server loop */
+    for (;;) 
+    {
+        /* Accepting connections */
+        client_socket = accept(server_socket, (struct sockaddr *)&client_address, (socklen_t *)&client_address_size);
+        if (client_socket == -1)
+        {
+            /* add error to proxy_log */
+            perror("Connection accepting error");
+            exit(1);
+        } 
+        
+        /* do we really need it --- otherwise, add it in the proxy_log */
+        printf("Connection accepted.\n");
+        
+        handle_client(server_socket, client_socket);
+
+        /* I think it is more reasonable to let server close client_socket in loop 
+         * 'cauz something can go wrong in that function -- > socket wom't be closed 
+         */
+        close(client_socket);
+
+        hand_data_to_postgres_server();
+    }
+
+    close(server_socket);
 }
