@@ -3,8 +3,7 @@
 
 extern void handle_client(int server_socket, int client_socket);
 extern void run_proxy();
-extern void find_postgres_server_port();
-extern int connect_postgres_server();
-
+extern int connect_to_postgres_server();
+extern void send_data_to_postgres_server();
 
 #endif /* PROXY_H */

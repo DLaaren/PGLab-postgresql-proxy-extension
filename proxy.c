@@ -2,24 +2,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include "postmaster/postmaster.c"
-
-/* 
- *  Я запрещаю вам использовать треды!!
- *  И посмотрите стиль кода модулей в постгресе пж
- * 
- *  $PGDATA="/var/lib/postgres/data"
- *  change default port in postgresql.conf for another one
- * 
- */
+#include <fcntl.h>
 
 #include "proxy.h"
 
 #define BUFFER_SIZE 4096
-#define ADDR "127.0.0.1"
+// #define LOCALHOST_ADDR "127.0.0.1"
+#define LOCALHOST_ADDR "localhost"
 #define DEFAULT_POSTGRES_PORT 5432
+//add as a parameter from command line
+#define POSTGRES_CURR_PORT 55432
 
 void
 handle_client(int server_socket, int client_socket)
@@ -48,18 +43,32 @@ handle_client(int server_socket, int client_socket)
     }
 }
 
-int 
-find_postgres_server_port()
-{
-    return PostPortNumber;
-}
 
-void
+/*
+ *  This function returns fd of the postgres server opened socket
+ */
+int
 connect_postgres_server()
 {
-    int postgres_server_port = find_postgres_server_port();
-    
-    /* connect */
+    int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (postgres_socket == -1)
+    {
+        perror("Proxy socket creating error");
+        exit(1);
+    }
+
+    struct sockaddr_in postgres_server;
+    postgres_server.sin_family = AF_INET;
+    postgres_server.sin_port = htons(POSTGRES_CURR_PORT);
+    postgres_server.sin_addr.s_addr = htonl(LOCALHOST_ADDR);
+
+    if (bind(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
+    {
+        perror("2Socket binding error");
+        exit(1);
+    }
+
+    printf("proxy connected to postgres server\n");
 }
 
 
@@ -85,42 +94,33 @@ run_proxy()
     /* TODO: create client and server structure for avoiding too many params in functions */
     int server_socket, client_socket;
     struct sockaddr_in server_address, client_address;
-    int client_address_size = sizeof(client_address);
 
-    /* Creating proxy_server socket */
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1)
     {
-        /* add error to proxy_log */
         perror("Proxy socket creating error");
         exit(1);
     }
 
-    /* Preparing proxy_server address */
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
     server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
 
-    /* Binding socket to proxy_server address */
     if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
-        /* add error to proxy_log */
         perror("Socket binding error");
         exit(1);
     }
 
     /* TODO: run the function in another process */
-    connect_postgres_server();
+    int postgres_socket_fd = connect_postgres_server(server_socket);
 
-    /* Listening connection */
     if (listen(server_socket, 10) == -1)
     {
-        /* add error to proxy_log */
         perror("Connection listening error");
         exit(1);
     }
 
-    /* do we really need it --- otherwise, add it in the proxy_log */
     printf("The proxy server is running. Waiting for connections...\n");
 
     /* 
@@ -170,4 +170,5 @@ run_proxy()
     }
 
     close(server_socket);
+    close(postgres_socket_fd);
 }

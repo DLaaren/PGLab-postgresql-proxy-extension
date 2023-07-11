@@ -2,7 +2,7 @@ MODULE_big = proxy
 OBJS = \
 	$(WIN32RES) \
 	proxy.o \
-	proxy_server.o \
+	proxy_bgw.o \
 	
 ifdef USE_PGXS
 PG_CONFIG = pg_config

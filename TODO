@@ -1,0 +1,3 @@
+add logging
+connect to postgres server
+make some echo connects after 
