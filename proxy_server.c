@@ -5,76 +5,43 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-/*
- * Я запрещаю вам использовать треды!!
- * И посмотрите стиль кода модулей в постгресе пж
+/* 
+ *  Я запрещаю вам использовать треды!!
+ *  И посмотрите стиль кода модулей в постгресе пж
  */
 
-#include "proxy.h"
+#include "proxy_server.h"
 
 #define BUFFER_SIZE 4096
+#define ADDR "127.0.0.1"
+#define PORT 8080
 
 void
-handle_client(void *arg)
+handle_client(int server_socket, int client_socket)
 {
-    int client_socket = *(int *) arg;
     char buffer[BUFFER_SIZE];
-    int server_socket;
-
-    /* Creating server socket */
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1)
-    {
-        /* add error to proxy_log */
-        perror("Socket creating error");
-        close(client_socket);
-    }
-
-    /* Preparing server addres */
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-
-    /* LATER: change port and ip(?) */
-
-    server_address.sin_addr.s_addr = inet_addr("127.0.0.1");  /* Server IP */
-    server_address.sin_port = htons(8080);  /* Server Port */
-
-    /* Connecting with server */
-    if (connect(server_socket, (struct sockaddr *) &server_address, sizeof(server_address)) == -1)
-    {
-        /* add error to proxy_log */
-        perror("Server connecting error");
-        close(client_socket);
-    }
 
     /* Recieving data from client */
     int bytes_received;
     while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0)
     {
-        /* Sending client data to server */
+        /* add to server_log which data received */
+        /* Sending reply to the client */
         if (send(server_socket, buffer, bytes_received, 0) == -1)
         {
             /* add error to proxy_log */
             perror("Client data sending error");
             close(client_socket);
         }
-
-        /* Recieving response from server */
-        int bytes_sent;
-        while ((bytes_sent = recv(server_socket, buffer, BUFFER_SIZE, 0)) > 0)
-        {
-            /* Sending server response to client */
-            if (send(client_socket, buffer, bytes_sent, 0) == -1)
-            {
-                /* add error to proxy_log */
-                perror("Server response sending error");
-                close(client_socket);
-            }
-        }
     }
-    close(server_socket);
-    close(client_socket);
+
+    /* doing something with the buffer */
 }
+
+
+/*
+ *  Rethink _exit() in "ifs"
+ */
 
 void 
 run_proxy()
@@ -83,7 +50,7 @@ run_proxy()
     struct sockaddr_in server_address, client_address;
     int client_address_size = sizeof(client_address);
 
-    /* Proxy socket */
+    /* Creating proxy_server socket */
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1)
     {
@@ -92,20 +59,20 @@ run_proxy()
         exit(1);
     }
 
-    /* Preparing socket address */
+    /* Preparing proxy_server address */
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_port = htons(8888);  /* Proxy port */
+    server_address.sin_addr.s_addr = htons(INADDR_ANY);
+    server_address.sin_port = htons(PORT);
 
-    /* Binding socket to proxy address */
-    if (bind(server_socket, (struct sockaddr *) &server_address, sizeof(server_address)) == -1)
+    /* Binding socket to proxy_server address */
+    if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
         /* add error to proxy_log */
         perror("Socket binding error");
         exit(1);
     }
 
-    /* Connection listening */
+    /* Listening connection */
     if (listen(server_socket, 10) == -1)
     {
         /* add error to proxy_log */
@@ -116,18 +83,27 @@ run_proxy()
     /* do we really need it --- otherwise, add it in the proxy_log */
     printf("The proxy server is running. Waiting for connections...\n");
 
-    /* Accepting connections */
+    /* Server loop */
     for (;;) 
     {
-        client_socket = accept(server_socket, (struct sockaddr *) &client_address, (socklen_t *) &client_address_size);
+        /* Accepting connections */
+        client_socket = accept(server_socket, (struct sockaddr *)&client_address, (socklen_t *)&client_address_size);
         if (client_socket == -1)
         {
             /* add error to proxy_log */
             perror("Connection accepting error");
             exit(1);
-        }
+        } 
+        
         /* do we really need it --- otherwise, add it in the proxy_log */
         printf("Connection accepted.\n");
+        
+        handle_client(server_socket, client_socket);
+
+        /* I think it is more reasonable to let server close client_socket in loop 
+         * 'cauz something can go wrong in that function -- > socket wom't be closed 
+         */
+        close(client_socket);
     }
 
     close(server_socket);

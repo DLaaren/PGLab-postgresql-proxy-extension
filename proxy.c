@@ -1,8 +1,12 @@
+/*
+ *  module description 
+ */
+
 #include "postgres.h"
 #include "fmgr.h"
 #include "postmaster/bgworker.h"
 
-#include "proxy.h"
+#include "proxy_server.h"
 
 PG_MODULE_MAGIC;
 
