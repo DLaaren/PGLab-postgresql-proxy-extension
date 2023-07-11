@@ -11,27 +11,35 @@ void _PG_init(void);
 PGDLLEXPORT void proxy_main(Datum main_arg);
 
 void
-proxy_main(Datum main_arg) {
+proxy_main(Datum main_arg)
+{
+/*
+ *  Unblocking signals from postgres processes
+ */
     BackgroundWorkerUnblockSignals();
 
+/*
+ *  Starting proxy server
+ */
     run_proxy();
 }
 
 void 
-_PG_init(void) {
-    elog(LOG, "Proxy has began to work.");
+_PG_init(void)
+{
+    elog(LOG, "proxy_server_bgw has began working.");
 
-    BackgroundWorker worker;
+    BackgroundWorker proxy_bgw;
 
-    memset(&worker, 0, sizeof(worker));
-    worker.bgw_flags = BGWORKER_SHMEM_ACCESS;
-    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-    worker.bgw_restart_time = BGW_NEVER_RESTART;
-    sprintf(worker.bgw_library_name, "proxy");
-    sprintf(worker.bgw_function_name, "proxy_main");
-    sprintf(worker.bgw_name, "proxy server worker");
-    sprintf(worker.bgw_type, "proxy");
+    memset(&proxy_bgw, 0, sizeof(proxy_bgw));
+    proxy_bgw.bgw_flags = BGWORKER_SHMEM_ACCESS;
+    proxy_bgw.bgw_start_time = BgWorkerStart_RecoveryFinished;
+    proxy_bgw.bgw_restart_time = BGW_NEVER_RESTART;
+    sprintf(proxy_bgw.bgw_library_name, "proxy");
+    sprintf(proxy_bgw.bgw_function_name, "proxy_main");
+    sprintf(proxy_bgw.bgw_name, "proxy_server_bgw");
+    sprintf(proxy_bgw.bgw_type, "proxy_server");
 
-    elog(LOG, "register proxy server");
-    RegisterBackgroundWorker(&worker);
+    RegisterBackgroundWorker(&proxy_bgw);
+    elog(LOG, "proxy_server_bgw has been registered");
 }
