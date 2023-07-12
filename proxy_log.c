@@ -27,6 +27,10 @@ void
 log_open()
 {
     proxy_log.file = fopen("logfile.log", "w");
+    if (NULL == proxy_log.file)
+    {
+        perror("ERROR: logfile could not be opened.");
+    }
 }
 
 void
@@ -38,7 +42,7 @@ log_write(MessageType type, char *message, ...)
     }
     if (NULL == proxy_log.file)
     {
-        perror("ERROR: logfile could not be opened.");
+        perror("ERROR: you can't write in logfile.");
         return;
     }
 
