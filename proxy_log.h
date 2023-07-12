@@ -4,18 +4,18 @@
 /* 
  * Opening logfile.
  */
-void log_open();
+extern void log_open();
 
 /* Write message in logfile. 
  * Opens logfile if it closed.
- * Args is the same as in "print" but "message" can be also as a format.
+ * Args is the same as in "printf", "message" can be also as a format.
  * Sym "/n" is placed automatically.
  */
-void log_write(char* message, ...);
+extern void log_write(char* message, ...);
 
 /*
  * Close logfile. 
 */
-void log_close();
+extern void log_close();
 
 #endif /* PROXY_LOG_H */
