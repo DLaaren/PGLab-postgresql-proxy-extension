@@ -1,9 +1,25 @@
 #ifndef PROXY_H
 #define PROXY_H
 
-extern void handle_client(int server_socket, int client_socket);
+/*
+ * Start proxy
+ */
 extern void run_proxy();
-extern int connect_to_postgres_server();
-extern void send_data_to_postgres_server();
+
+/*
+ * Get connection to postgres server from proxy
+ */
+extern int connect_postgres_server();
+
+/*
+ *  Send data to postgres server
+ */
+extern void send_data_postgres_server();
+
+/*
+ *  Process data gotten from a client
+ */
+extern void process_client_data(int server_socket, int client_socket);
+
 
 #endif /* PROXY_H */

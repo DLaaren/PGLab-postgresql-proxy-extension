@@ -12,17 +12,16 @@
 #define BUFFER_SIZE 4096
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
-
-//add as a parameter from command line
-#define POSTGRES_CURR_PORT 55432
+#define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
 
 void
-handle_client(int server_socket, int client_socket)
+process_client_data(int server_socket, int client_socket)
 {
     char buffer[BUFFER_SIZE];
     int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_recieved <= 0)
     {
+        /* FOR EGOR:: get rid of these printfs and add your logging */
         if (bytes_recieved == 0)
         {
             printf("Client has lost connection\n");
@@ -42,35 +41,27 @@ handle_client(int server_socket, int client_socket)
             perror("Data sending error");
         }
     }
+    /* BAYARTO :: добавь сквозную отправку от клиента к прокси; от прокси к серверу */
 }
 
-
-/*
- *  This function returns fd of the postgres server opened socket
- */
 int
 connect_postgres_server()
 {
     int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (postgres_socket == -1)
     {
-        printf("aboba1\n");
         perror("Proxy socket creating error");
         exit(1);
     }
-
-    printf("aboba2\n");
 
     struct sockaddr_in postgres_server;
     postgres_server.sin_family = AF_INET;
     postgres_server.sin_port = htons(POSTGRES_CURR_PORT);
     postgres_server.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
 
-    printf("aboba3\n");
-
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
-        perror("2Socket binding error");
+        perror("Socket binding error");
         exit(1);
     }
 
@@ -163,10 +154,11 @@ run_proxy()
                         max_fd = client_socket;
                     }
                     FD_SET(client_socket, &master_fds);
+                    /* заменить на лог Егора */
                     elog(LOG, "New connection from client: %s:%d\n",
                             inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
-                }
-                else {
+                } else
+                {
                     handle_client(server_socket, client_socket);
                     FD_CLR(fd, &master_fds);
                 }
