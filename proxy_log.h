@@ -1,6 +1,12 @@
 #ifndef PROXY_LOG_H
 #define PROXY_LOG_H
 
+typedef enum MessageType {
+    INFO,
+    WARNING,
+    ERROR
+} MessageType;
+
 /* 
  * Opening logfile.
  */
@@ -11,7 +17,7 @@ extern void log_open();
  * Args is the same as in "printf", "message" can be also as a format.
  * Sym "/n" is placed automatically.
  */
-extern void log_write(char* message, ...);
+extern void log_write(MessageType type, char* message, ...);
 
 /*
  * Close logfile. 
