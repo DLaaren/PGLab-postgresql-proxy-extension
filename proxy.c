@@ -20,7 +20,7 @@ void
 handle_client_data(int postgres_socket, int client_socket)
 {
     char buffer[BUFFER_SIZE];
-    int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE, 0);
     if (bytes_recieved <= 0)
     {
         if (bytes_recieved == 0)
@@ -33,7 +33,6 @@ handle_client_data(int postgres_socket, int client_socket)
 
     } else
     {
-        buffer[bytes_recieved] = '\0';
         log_write(INFO, "Recieved from client: %s\n", buffer);
     }
     if (send(postgres_socket, buffer, bytes_recieved, 0) == -1)
@@ -47,7 +46,7 @@ void
 handle_postgres_data(int postgres_socket, int client_socket)
 {
     char buffer[BUFFER_SIZE];
-    int bytes_recieved = recv(postgres_socket, buffer, BUFFER_SIZE - 1, 0);
+    int bytes_recieved = recv(postgres_socket, buffer, BUFFER_SIZE, 0);
     if (bytes_recieved <= 0)
     {
         if (bytes_recieved == 0)
@@ -60,7 +59,6 @@ handle_postgres_data(int postgres_socket, int client_socket)
 
     } else
     {
-        buffer[bytes_recieved] = '\0';
         log_write(INFO, "Recieved from postgres: %s\n", buffer);
     }
     if (send(client_socket, buffer, bytes_recieved, 0) == -1)
@@ -106,7 +104,6 @@ accept_connection(int client_socket, int proxy_socket, struct sockaddr_in *clien
     {
         log_write(ERROR, "Client connection accept error");
         perror("Connection accept error");
-        return -1;
     }
     return client_socket;
 }
@@ -114,10 +111,10 @@ accept_connection(int client_socket, int proxy_socket, struct sockaddr_in *clien
 void 
 run_proxy()
 {
-    log_open();   
-
     int proxy_socket, client_socket, postgres_socket;
     struct sockaddr_in server_address, client_address;
+
+    log_open();  
 
     proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (proxy_socket == -1)
@@ -159,10 +156,13 @@ run_proxy()
     /* it is needed to make this infinite loop in another forked loop */
     for (;;)
     {   
+        /* ADD :: before handling data check if the connection is alive */
+
         handle_client_data(postgres_socket, client_socket);
         handle_postgres_data(postgres_socket, client_socket);
-        printf("smth wrong\n");
-        /* FIX :: rarely connection is lost */
+        /* FIX :: rarely connection is lost 
+         * idk why it is happening
+         */
     }
 
     close(client_socket);
