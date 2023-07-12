@@ -10,9 +10,9 @@
 #include "proxy.h"
 
 #define BUFFER_SIZE 4096
-// #define LOCALHOST_ADDR "127.0.0.1"
-#define LOCALHOST_ADDR "localhost"
+#define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
+
 //add as a parameter from command line
 #define POSTGRES_CURR_PORT 55432
 
@@ -21,7 +21,8 @@ handle_client(int server_socket, int client_socket)
 {
     char buffer[BUFFER_SIZE];
     int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-    if (bytes_recieved <= 0) {
+    if (bytes_recieved <= 0)
+    {
         if (bytes_recieved == 0)
         {
             printf("Client has lost connection\n");
@@ -53,16 +54,21 @@ connect_postgres_server()
     int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (postgres_socket == -1)
     {
+        printf("aboba1\n");
         perror("Proxy socket creating error");
         exit(1);
     }
 
+    printf("aboba2\n");
+
     struct sockaddr_in postgres_server;
     postgres_server.sin_family = AF_INET;
     postgres_server.sin_port = htons(POSTGRES_CURR_PORT);
-    postgres_server.sin_addr.s_addr = htonl(LOCALHOST_ADDR);
+    postgres_server.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
 
-    if (bind(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
+    printf("aboba3\n");
+
+    if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
         perror("2Socket binding error");
         exit(1);
@@ -112,7 +118,6 @@ run_proxy()
         exit(1);
     }
 
-    /* TODO: run the function in another process */
     int postgres_socket_fd = connect_postgres_server(server_socket);
 
     if (listen(server_socket, 10) == -1)
@@ -136,7 +141,7 @@ run_proxy()
     max_fd = server_socket;
     char buffer[BUFFER_SIZE];
     /* Accepting connections and handling clients */
-    while(1)
+    for (;;)
     {
         read_fds = master_fds;
         

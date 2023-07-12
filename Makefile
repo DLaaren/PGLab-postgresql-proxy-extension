@@ -3,6 +3,7 @@ OBJS = \
 	$(WIN32RES) \
 	proxy.o \
 	proxy_bgw.o \
+	proxy_log.o
 	
 ifdef USE_PGXS
 PG_CONFIG = pg_config

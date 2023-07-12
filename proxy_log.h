@@ -14,4 +14,4 @@ void log_write(char* message, ...);
 /* Close logfile. */
 void log_close();
 
-#endif
+#endif /* PROXY_LOG_H */
