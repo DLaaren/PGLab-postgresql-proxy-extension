@@ -26,5 +26,10 @@ int accept_connection(int client_socket, int server_socket, struct sockaddr_in *
  */
 void handle_client_data(int server_socket, int postgres_socket, int client_socket);
 
+/*
+ *
+ */
+void
+handle_postgres_data(int server_socket, int postgres_socket, int client_socket);
 
 #endif /* PROXY_H */
