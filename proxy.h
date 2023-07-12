@@ -4,22 +4,27 @@
 /*
  * Start proxy
  */
-extern void run_proxy();
+void run_proxy();
 
 /*
  * Get connection to postgres server from proxy
  */
-extern int connect_postgres_server();
+int connect_postgres_server();
 
 /*
  *  Send data to postgres server
  */
-extern void send_data_postgres_server();
+void send_data_postgres_server();
 
 /*
- *  Process data gotten from a client
+ * 
  */
-extern void process_client_data(int server_socket, int client_socket);
+int accept_connection(int client_socket, int server_socket, struct sockaddr_in *client_address); 
+
+/*
+ *  Handle data gotten from a client
+ */
+void handle_client_data(int server_socket, int postgres_socket, int client_socket);
 
 
 #endif /* PROXY_H */

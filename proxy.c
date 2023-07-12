@@ -6,8 +6,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/select.h>
 
 #include "proxy.h"
+#include "proxy_log.h"
 
 #define BUFFER_SIZE 4096
 #define LOCALHOST_ADDR "127.0.0.1"
@@ -15,7 +17,7 @@
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
 
 void
-process_client_data(int server_socket, int client_socket)
+handle_client_data(int server_socket, int postgres_socket, int client_socket)
 {
     char buffer[BUFFER_SIZE];
     int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
@@ -41,7 +43,11 @@ process_client_data(int server_socket, int client_socket)
             perror("Data sending error");
         }
     }
-    /* BAYARTO :: добавь сквозную отправку от клиента к прокси; от прокси к серверу */
+    if (send(postgres_socket, buffer, bytes_recieved, 0) == -1)
+    {
+        //ашибкакааааака
+    }
+    printf("sent data :: %s\n", buffer);
 }
 
 int
@@ -66,6 +72,7 @@ connect_postgres_server()
     }
 
     printf("proxy connected to postgres server\n");
+    return postgres_socket;
 }
 
 
@@ -73,7 +80,7 @@ connect_postgres_server()
  *  Rethink _exit() in "ifs"
  */
 
-void
+int
 accept_connection(int client_socket, int server_socket, struct sockaddr_in *client_address) 
 {
     socklen_t client_len = sizeof(client_address);
@@ -81,13 +88,16 @@ accept_connection(int client_socket, int server_socket, struct sockaddr_in *clie
     if (client_socket == -1)
     {
         perror("Connection accept error");
-        exit(1);
+        return -1;
     }
+    return client_socket;
 }
 
 void 
 run_proxy()
 {
+    //log_open();   
+
     /* TODO: create client and server structure for avoiding too many params in functions */
     int server_socket, client_socket;
     struct sockaddr_in server_address, client_address;
@@ -99,6 +109,9 @@ run_proxy()
         exit(1);
     }
 
+    int postgres_socket = connect_postgres_server(server_socket);
+
+
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
     server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
@@ -109,8 +122,6 @@ run_proxy()
         exit(1);
     }
 
-    int postgres_socket_fd = connect_postgres_server(server_socket);
-
     if (listen(server_socket, 10) == -1)
     {
         perror("Connection listening error");
@@ -119,11 +130,12 @@ run_proxy()
 
     printf("The proxy server is running. Waiting for connections...\n");
 
+
     /* 
      * We need to use two fd sets because select() systemcall modify read_fds
      * and we must update this fd set in each iteration
      */
-    fd_set master_fds, read_fds;
+    fd_set master_fds, read_fds; /* read_fds --- ready to read fds */
     /* For first argument of select() */
     int max_fd;
 
@@ -148,18 +160,18 @@ run_proxy()
             {
                 if (fd == server_socket)
                 {
-                    accept_connection(client_socket, server_socket, &client_address);
+                    client_socket = accept_connection(client_socket, server_socket, &client_address);
                     if (client_socket > max_fd)
                     {
                         max_fd = client_socket;
                     }
                     FD_SET(client_socket, &master_fds);
                     /* заменить на лог Егора */
-                    elog(LOG, "New connection from client: %s:%d\n",
-                            inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+                    //elog(LOG, "New connection from client: %s:%d\n",
+                            //inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
                 } else
                 {
-                    handle_client(server_socket, client_socket);
+                    handle_client_data(server_socket, postgres_socket, fd);
                     FD_CLR(fd, &master_fds);
                 }
             }
@@ -167,5 +179,6 @@ run_proxy()
     }
 
     close(server_socket);
-    close(postgres_socket_fd);
+    close(postgres_socket);
+    close(client_socket);
 }
