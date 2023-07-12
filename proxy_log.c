@@ -54,6 +54,8 @@ log_write(MessageType type, char *message, ...)
     va_start(vl, message);
     vfprintf(proxy_log.file, message, vl);
     va_end(vl);
+
+    /*Writes reason of error.*/
     if (type != INFO && errno != 0) {
         fprintf(proxy_log.file, "\n%s.\nProcess [%d] caused error with code %d.", strerror(errno), getpid(), errno);
         errno = 0;
