@@ -17,12 +17,18 @@
 #define DEFAULT_POSTGRES_PORT 5432
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
 
+#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+
 typedef struct channel {
-    int front_fd; /* client */
-    int back_fd; /* postgres */
+    int front_fd;                           /* client */
+    int back_fd;                            /* postgres */
     char front_to_back[BUFFER_SIZE];
     char back_to_front[BUFFER_SIZE];
 } channel;
+
+void set_channel(int postgres_socket, int client_socket, channel *channel) {
+
+}
 
 void
 handle_client_data(channel *channel)
@@ -99,23 +105,30 @@ connect_postgres_server()
 
 
 int
-accept_connection(int client_socket, int proxy_socket, struct sockaddr_in *client_address) 
+accept_connection(int proxy_socket) 
 {
+    struct sockaddr_in client_address;
+
+    client_address.sin_family = AF_INET;
+    client_address.sin_port = htons(POSTGRES_CURR_PORT);
+    client_address.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
     socklen_t client_len = sizeof(client_address);
-    client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
+
+    int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
         log_write(ERROR, "Client connection accept error");
         perror("Connection accept error");
     }
+
     return client_socket;
 }
 
 void 
 run_proxy()
 {
-    int proxy_socket, client_socket, postgres_socket;
-    struct sockaddr_in server_address, client_address;
+    int proxy_socket;
+    struct sockaddr_in server_address;
 
     log_open();  
 
@@ -145,18 +158,22 @@ run_proxy()
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
 
+    channel channels[MAX_CLIENTS];
+    int last_idx = 0; /* ну хто тут насрал индексами*/ /* надо глянуть постгресовые листы, а то ебаться с индексами никто не хочет*/
+    /* Posgres list */
 
     fd_set master_fds, read_fds, write_fds;
     int max_fd;
+    
+    struct timeval tv;
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
 
     FD_ZERO(&master_fds);
     FD_SET(proxy_socket, &master_fds);
     max_fd = proxy_socket;
-    /**/char buffer[BUFFER_SIZE];
-    struct timeval tv;
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
 
+    /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
     for (;;)
     {
         write_fds = master_fds;
@@ -170,27 +187,38 @@ run_proxy()
         {
             if (fd == proxy_socket)
             {
-                if ((client_socket = accept_connection() ) > max_fd)
-                { 
-                    max_fd = client_socket; 
-                }
+                /* connect client and connect to posgres and create channel */
+                channels[last_idx++];
+                int client_socket = accept_connection(proxy_socket);
+                int postgres_socket = connect_postgres_server();
+                max_fd = MAX(client_socket, postgres_socket);
+
+                set_channel(postgres_socket, client_socket, &channels[last_idx]);
+
                 FD_SET(client_socket, &master_fds);
+                FD_SET(postgres_socket, &master_fds);
             }
+
+            /* Главная беда, а как понять какой дескриптор из какого канала ???? */
+            /* я бы бежала не по всем дескрипторам, а по всем каналам из списка, и заглядывала бы внутрь каждого, и оттуда брала бы дескрипторы */
+
+            /* Этих функций еще не существует */
             if (FD_ISSET(fd, &read_fds))
             {   
-                read_all_data();
+                read_data();
             }
             if (FD_ISSET(fd, &write_fds))
             {
-                write_all_data();
+                write_data();
             }
         }
 
     }
 
+
 /*  for test connections 
 
-    client_socket = accept_connection(client_socket, proxy_socket, &client_address);
+    client_socket = accept_connection(proxy_socket);
     postgres_socket = connect_postgres_server();
 
     channel *channel = calloc(1, sizeof(channel));
@@ -205,9 +233,7 @@ run_proxy()
     
 */
 
-    free(channel);
-    close(client_socket);
-    close(postgres_socket);
+
     close(proxy_socket);
 
     log_write(INFO, "All sockets were closed. Proxy server is shutting down...");
