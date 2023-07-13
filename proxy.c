@@ -11,10 +11,17 @@
 #include "proxy.h"
 #include "proxy_log.h"
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 1024
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
+
+typedef struct channel {
+    int front_fd;
+    int back_fd;
+    char front_to_back[BUFFER_SIZE];
+    char back_to_front[BUFFER_SIZE];
+} channel;
 
 void
 handle_client_data(int postgres_socket, int client_socket)
@@ -123,9 +130,6 @@ run_proxy()
         exit(1);
     }
 
-    postgres_socket = connect_postgres_server();
-
-
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
     server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
@@ -144,26 +148,33 @@ run_proxy()
 
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
-    /*
-     * BAYARTO :: Я временно убрала твоё мультиплексирование, давай сначала разобьем
-     *            на разные процессы (см ниже), потом уже со спокойной душой (что все коннекты рабочие)
-     *            сделаем мультиплексирование (достанем твою наработку из коммита) 
-     */
+    for (;;)
+    {
+        client_socket = accept_connection(client_socket, proxy_socket, &client_address);
+        if (client_socket != -1)
+        {   
+            postgres_socket = connect_postgres_server();
+            /* add new sctruct cannel to list of connection */
 
-    /* it is needed to make infinte loop in forked process for waiting and accepting new clients */
-    client_socket = accept_connection(client_socket, proxy_socket, &client_address);
+            
+            /*
+             *  multyplexing 
+             *  check which fds are ready to write and whick fds are ready to read 
+             */
+        }
+    }
 
     /* it is needed to make this infinite loop in another forked loop */
-    for (;;)
+    /*for (;;)
     {   
         /* ADD :: before handling data check if the connection is alive */
 
-        handle_client_data(postgres_socket, client_socket);
-        handle_postgres_data(postgres_socket, client_socket);
+        /*handle_client_data(postgres_socket, client_socket);
+        handle_postgres_data(postgres_socket, client_socket);*/
         /* FIX :: rarely connection is lost 
          * idk why it is happening
          */
-    }
+    // }
 
     close(client_socket);
     close(postgres_socket);
