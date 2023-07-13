@@ -12,67 +12,63 @@
 #include "proxy_log.h"
 
 #define BUFFER_SIZE 1024
+#define MAX_CLIENTS 10
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
 
 typedef struct channel {
-    int front_fd;
-    int back_fd;
+    int front_fd; /* client */
+    int back_fd; /* postgres */
     char front_to_back[BUFFER_SIZE];
     char back_to_front[BUFFER_SIZE];
 } channel;
 
 void
-handle_client_data(int postgres_socket, int client_socket)
+handle_client_data(channel *channel)
 {
-    char buffer[BUFFER_SIZE];
-    int bytes_recieved = recv(client_socket, buffer, BUFFER_SIZE, 0);
-    if (bytes_recieved <= 0)
-    {
-        if (bytes_recieved == 0)
-        {
-            log_write(WARNING, "Client has lost connection");
-        } else
-        {
-            log_write(ERROR, "Client's data reading error");
-        }
+    int bytes_recieved = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
 
-    } else
+    if (bytes_recieved == -1)
     {
-        log_write(INFO, "Recieved from client: %s\n", buffer);
+        log_write(ERROR, "Client's data reading error");
     }
-    if (send(postgres_socket, buffer, bytes_recieved, 0) == -1)
+    if (bytes_recieved == 0)
+    {
+        log_write(WARNING, "Client has lost connection");
+    }
+
+    log_write(INFO, "Recieved %d bytes from client\n", bytes_recieved);
+
+    if (write(channel->back_fd, channel->front_to_back, bytes_recieved) == -1)
     {
         log_write(ERROR, "Data sending to postgres error");
     }
-    log_write(INFO, "Sent data to postgres: %s\n", buffer);
+    log_write(INFO, "Sent data to postgres server\n");
 }
 
 void
-handle_postgres_data(int postgres_socket, int client_socket)
+handle_postgres_data(channel *channel)
 {
-    char buffer[BUFFER_SIZE];
-    int bytes_recieved = recv(postgres_socket, buffer, BUFFER_SIZE, 0);
-    if (bytes_recieved <= 0)
-    {
-        if (bytes_recieved == 0)
-        {
-            log_write(WARNING, "Postgres has lost connection");
-        } else
-        {
-            log_write(ERROR, "Postgres' data reading error");
-        }
+    int bytes_recieved = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
 
-    } else
+    if (bytes_recieved == -1)
     {
-        log_write(INFO, "Recieved from postgres: %s\n", buffer);
+        log_write(ERROR, "Postgres' data reading error");
     }
-    if (send(client_socket, buffer, bytes_recieved, 0) == -1)
+    if (bytes_recieved == 0)
+    {
+        log_write(WARNING, "Postgres has lost connection");
+    }
+
+
+    log_write(INFO, "Recieved from postgres server\n");
+
+    if (write(channel->front_fd, channel->back_to_front, bytes_recieved) == -1)
     {
         log_write(ERROR, "Data sending to client error");
     }
-    log_write(INFO, "Sent data to client: %s\n", buffer);
+    log_write(INFO, "Sent data to client\n");
 }
 
 int
@@ -148,34 +144,68 @@ run_proxy()
 
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
+
+
+    fd_set master_fds, read_fds, write_fds;
+    int max_fd;
+
+    FD_ZERO(&master_fds);
+    FD_SET(proxy_socket, &master_fds);
+    max_fd = proxy_socket;
+    /**/char buffer[BUFFER_SIZE];
+    struct timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+
     for (;;)
     {
-        client_socket = accept_connection(client_socket, proxy_socket, &client_address);
-        if (client_socket != -1)
-        {   
-            postgres_socket = connect_postgres_server();
-            /* add new sctruct cannel to list of connection */
-
-            
-            /*
-             *  multyplexing 
-             *  check which fds are ready to write and whick fds are ready to read 
-             */
+        write_fds = master_fds;
+        read_fds = master_fds;
+        if (select(max_fd + 1, &read_fds, &write_fds, NULL, &tv))
+        {
+            //error
         }
+
+        for (int fd = 0; fd <= max_fd; fd++) 
+        {
+            if (fd == proxy_socket)
+            {
+                if ((client_socket = accept_connection() ) > max_fd)
+                { 
+                    max_fd = client_socket; 
+                }
+                FD_SET(client_socket, &master_fds);
+            }
+            if (FD_ISSET(fd, &read_fds))
+            {   
+                read_all_data();
+            }
+            if (FD_ISSET(fd, &write_fds))
+            {
+                write_all_data();
+            }
+        }
+
     }
 
-    /* it is needed to make this infinite loop in another forked loop */
-    /*for (;;)
+/*  for test connections 
+
+    client_socket = accept_connection(client_socket, proxy_socket, &client_address);
+    postgres_socket = connect_postgres_server();
+
+    channel *channel = calloc(1, sizeof(channel));
+    channel->front_fd = client_socket;
+    channel->back_fd = postgres_socket;
+
+    for (;;)
     {   
-        /* ADD :: before handling data check if the connection is alive */
+        handle_client_data(channel);
+        handle_postgres_data(channel);
+    }
+    
+*/
 
-        /*handle_client_data(postgres_socket, client_socket);
-        handle_postgres_data(postgres_socket, client_socket);*/
-        /* FIX :: rarely connection is lost 
-         * idk why it is happening
-         */
-    // }
-
+    free(channel);
     close(client_socket);
     close(postgres_socket);
     close(proxy_socket);

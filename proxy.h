@@ -24,11 +24,11 @@ int accept_connection(int client_socket, int server_socket, struct sockaddr_in *
 /*
  *  Handle data gotten from a client and send to postgres server
  */
-void handle_client_data(int postgres_socket, int client_socket);
+void handle_client_data(channel *client);
 
 /*
  * Handle data gotten from postgres server and send back to the client
  */
-void handle_postgres_data(int postgres_socket, int client_socket);
+void handle_postgres_data(channel *client);
 
 #endif /* PROXY_H */
