@@ -5,9 +5,7 @@
 #include <sys/un.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/select.h>
-#include <errno.h>
 
 #include "c.h"
 #include "nodes/pg_list.h"
@@ -121,32 +119,32 @@ accept_connection(int proxy_socket)
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
-        if (errno == EWOULDBLOCK) {
-            //no connections
-        }
-        else
-        { 
-            log_write(ERROR, "Client connection accept error");
-        }
+        log_write(ERROR, "Client connection accept error");
     }
 
     return client_socket;
 }
 
 List *
-create_channel(List *channels, int postgres_socket, int client_socket)
+create_channel(List *channels, int postgres_socket, int client_socket) /* хз в чем была проблема но я всё пофиксила лол */
 {
-    channel *new_channel = calloc(1, sizeof(channel));
+    /* idk what's wrong with palloc */
+    /*
+     *  probably because palloc allocates memory in backend's memory for transactions 
+     *  but i'm not sure
+     */
+    channel *new_channel = (channel *)calloc(1, sizeof(channel));
     new_channel->back_fd = postgres_socket;
     new_channel->front_fd = client_socket;
     /*
      *  Append a pointer to the list. A pointer to the modified list is
      *  returned. Note that this function may or may not destructively
-     *  modify the list; callers should always use this function's return
      *  value, rather than continuing to use the pointer passed as the
      *  first argument.
      */
+    
     channels = lappend(channels, new_channel);
+    printf("channel has been created\n");
     return channels;
 }
 
@@ -188,11 +186,11 @@ run_proxy()
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
 
-    /**/ printf("proxy socket is listening\n");
+    printf("proxy socket is listening\n");
 
 
-    List *channels;
-    const ListCell *cell;
+    List *channels = NIL;
+    const ListCell *cell = NULL;
 
     fd_set master_fds, read_fds, write_fds;
     int max_fd;
@@ -209,6 +207,7 @@ run_proxy()
     printf("before the main loop\n");
 
     /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
+    int flag = 0;
     for (;;)
     {
         write_fds = master_fds;
@@ -221,18 +220,14 @@ run_proxy()
         if (FD_ISSET(proxy_socket, &read_fds))
         {
             client_socket = accept_connection(proxy_socket); /* cpu usage 100000)o)0o0 %%& */ /* LATER :: FIX IT CAUSE OTHERWISE MY PC WILL DIE*/
-            if (client_socket != 1)
-            {
-                postgres_socket = connect_postgres_server();
-                printf("has connection\n");
-            }
+            postgres_socket = connect_postgres_server();
+            printf("has connection\n");
+            max_fd = MAX(client_socket, postgres_socket);
+            FD_SET(client_socket, &master_fds);
+            FD_SET(postgres_socket, &master_fds);
+
+            channels = create_channel(channels, postgres_socket, client_socket);
         }
-
-        /*channels = create_channel(channels, postgres_socket, client_socket);
-
-        max_fd = MAX(client_socket, postgres_socket);
-        FD_SET(client_socket, &master_fds);
-        FD_SET(postgres_socket, &master_fds);
 
         foreach(cell, channels)
         {
@@ -240,33 +235,31 @@ run_proxy()
 
             int fd = curr_channel->front_fd;
 
-            /* Этих функций еще не существует */
-            /*if (FD_ISSET(fd, &read_fds))
+            if (FD_ISSET(fd, &read_fds))
             {   
-                // read_data();
+                printf("read data from front\n");
             }
             if (FD_ISSET(fd, &write_fds))
             {
-                // write_data();
+                printf("write data from front\n");
             }
 
             fd = curr_channel->back_fd;
 
              if (FD_ISSET(fd, &read_fds))
             {   
-                // read_data();
+                printf("read data from postgres\n");
             }
             if (FD_ISSET(fd, &write_fds))
             {
-                // write_data();
+                printf("write data from postgres\n");
             }
 
-        }*/
-
+        }
     }
 
     close(proxy_socket);
-    // list_free(channels);
+    list_free(channels);
 
     log_write(INFO, "All sockets were closed. Proxy server is shutting down...");
 
