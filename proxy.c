@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <errno.h>
+
+#include "nodes/pg_list.h"
 
 #include "proxy.h"
 #include "proxy_log.h"
@@ -17,7 +20,7 @@
 #define DEFAULT_POSTGRES_PORT 5432
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
 
-#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 typedef struct channel {
     int front_fd;                           /* client */
@@ -117,11 +120,31 @@ accept_connection(int proxy_socket)
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
+        if (errno == EWOULDBLOCK) {
+            //no connections
+        }
         log_write(ERROR, "Client connection accept error");
         perror("Connection accept error");
     }
 
     return client_socket;
+}
+
+List *
+create_channel(List *channels, int postgres_socket, int client_socket)
+{
+    channel *new_channel = calloc(1, sizeof(channel));
+    new_channel->back_fd = postgres_socket;
+    new_channel->front_fd = client_socket;
+    /*
+     *  Append a pointer to the list. A pointer to the modified list is
+     *  returned. Note that this function may or may not destructively
+     *  modify the list; callers should always use this function's return
+     *  value, rather than continuing to use the pointer passed as the
+     *  first argument.
+     */
+    channels = lappend(channels, new_channel);
+    return channels;
 }
 
 void 
@@ -139,6 +162,9 @@ run_proxy()
         exit(1);
     }
 
+    int proxy_socket_flags = fcntl(proxy_socket, F_GETFL);
+    fcntl(proxy_socket, F_SETFL, proxy_socket_flags | O_NONBLOCK);
+
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
     server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
@@ -149,7 +175,7 @@ run_proxy()
         exit(1);
     }
 
-    if (listen(proxy_socket, 10) == -1)
+    if (listen(proxy_socket, MAX_CLIENTS) == -1)
     {
         log_write(ERROR, "Proxy's socket listening error");
         exit(1);
@@ -158,9 +184,8 @@ run_proxy()
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
 
-    channel channels[MAX_CLIENTS];
-    int last_idx = 0; /* ну хто тут насрал индексами*/ /* надо глянуть постгресовые листы, а то ебаться с индексами никто не хочет*/
-    /* Posgres list */
+    List *channels;
+    const ListCell *cell;
 
     fd_set master_fds, read_fds, write_fds;
     int max_fd;
@@ -183,24 +208,20 @@ run_proxy()
             //error
         }
 
-        for (int fd = 0; fd <= max_fd; fd++) 
+        int client_socket = accept_connection(proxy_socket);
+        int postgres_socket = connect_postgres_server();
+
+        channels = create_channel(channels, postgres_socket, client_socket);
+
+        max_fd = MAX(client_socket, postgres_socket);
+        FD_SET(client_socket, &master_fds);
+        FD_SET(postgres_socket, &master_fds);
+
+        foreach(cell, channels)
         {
-            if (fd == proxy_socket)
-            {
-                /* connect client and connect to posgres and create channel */
-                channels[last_idx++];
-                int client_socket = accept_connection(proxy_socket);
-                int postgres_socket = connect_postgres_server();
-                max_fd = MAX(client_socket, postgres_socket);
+            channel *curr_channel = lfirst(cell);
 
-                set_channel(postgres_socket, client_socket, &channels[last_idx]);
-
-                FD_SET(client_socket, &master_fds);
-                FD_SET(postgres_socket, &master_fds);
-            }
-
-            /* Главная беда, а как понять какой дескриптор из какого канала ???? */
-            /* я бы бежала не по всем дескрипторам, а по всем каналам из списка, и заглядывала бы внутрь каждого, и оттуда брала бы дескрипторы */
+            int fd = curr_channel->front_fd;
 
             /* Этих функций еще не существует */
             if (FD_ISSET(fd, &read_fds))
@@ -211,6 +232,18 @@ run_proxy()
             {
                 write_data();
             }
+
+            fd = curr_channel->back_fd;
+
+             if (FD_ISSET(fd, &read_fds))
+            {   
+                read_data();
+            }
+            if (FD_ISSET(fd, &write_fds))
+            {
+                write_data();
+            }
+
         }
 
     }
@@ -235,6 +268,7 @@ run_proxy()
 
 
     close(proxy_socket);
+    list_free(channels);
 
     log_write(INFO, "All sockets were closed. Proxy server is shutting down...");
 
