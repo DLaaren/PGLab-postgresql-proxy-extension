@@ -9,6 +9,7 @@
 #include <sys/select.h>
 #include <errno.h>
 
+#include "c.h"
 #include "nodes/pg_list.h"
 
 #include "proxy.h"
@@ -123,8 +124,10 @@ accept_connection(int proxy_socket)
         if (errno == EWOULDBLOCK) {
             //no connections
         }
-        log_write(ERROR, "Client connection accept error");
-        perror("Connection accept error");
+        else
+        { 
+            log_write(ERROR, "Client connection accept error");
+        }
     }
 
     return client_socket;
@@ -162,8 +165,9 @@ run_proxy()
         exit(1);
     }
 
-    int proxy_socket_flags = fcntl(proxy_socket, F_GETFL);
-    fcntl(proxy_socket, F_SETFL, proxy_socket_flags | O_NONBLOCK);
+    /* bullshit ---> proxy exits with code 1 because of non-blocking accept */
+    //int proxy_socket_flags = fcntl(proxy_socket, F_GETFL);
+    //fcntl(proxy_socket, F_SETFL, proxy_socket_flags | O_NONBLOCK);
 
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
@@ -184,11 +188,15 @@ run_proxy()
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
 
+    /**/ printf("proxy socket is listening\n");
+
+
     List *channels;
     const ListCell *cell;
 
     fd_set master_fds, read_fds, write_fds;
     int max_fd;
+    int postgres_socket, client_socket;
     
     struct timeval tv;
     tv.tv_sec = 3;
@@ -197,6 +205,8 @@ run_proxy()
     FD_ZERO(&master_fds);
     FD_SET(proxy_socket, &master_fds);
     max_fd = proxy_socket;
+
+    printf("before the main loop\n");
 
     /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
     for (;;)
@@ -208,10 +218,17 @@ run_proxy()
             //error
         }
 
-        int client_socket = accept_connection(proxy_socket);
-        int postgres_socket = connect_postgres_server();
+        if (FD_ISSET(proxy_socket, &read_fds))
+        {
+            client_socket = accept_connection(proxy_socket); /* cpu usage 100000)o)0o0 %%& */ /* LATER :: FIX IT CAUSE OTHERWISE MY PC WILL DIE*/
+            if (client_socket != 1)
+            {
+                postgres_socket = connect_postgres_server();
+                printf("has connection\n");
+            }
+        }
 
-        channels = create_channel(channels, postgres_socket, client_socket);
+        /*channels = create_channel(channels, postgres_socket, client_socket);
 
         max_fd = MAX(client_socket, postgres_socket);
         FD_SET(client_socket, &master_fds);
@@ -224,51 +241,32 @@ run_proxy()
             int fd = curr_channel->front_fd;
 
             /* Этих функций еще не существует */
-            if (FD_ISSET(fd, &read_fds))
+            /*if (FD_ISSET(fd, &read_fds))
             {   
-                read_data();
+                // read_data();
             }
             if (FD_ISSET(fd, &write_fds))
             {
-                write_data();
+                // write_data();
             }
 
             fd = curr_channel->back_fd;
 
              if (FD_ISSET(fd, &read_fds))
             {   
-                read_data();
+                // read_data();
             }
             if (FD_ISSET(fd, &write_fds))
             {
-                write_data();
+                // write_data();
             }
 
-        }
+        }*/
 
     }
-
-
-/*  for test connections 
-
-    client_socket = accept_connection(proxy_socket);
-    postgres_socket = connect_postgres_server();
-
-    channel *channel = calloc(1, sizeof(channel));
-    channel->front_fd = client_socket;
-    channel->back_fd = postgres_socket;
-
-    for (;;)
-    {   
-        handle_client_data(channel);
-        handle_postgres_data(channel);
-    }
-    
-*/
-
 
     close(proxy_socket);
-    list_free(channels);
+    // list_free(channels);
 
     log_write(INFO, "All sockets were closed. Proxy server is shutting down...");
 
