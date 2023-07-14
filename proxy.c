@@ -212,9 +212,10 @@ run_proxy()
     {
         write_fds = master_fds;
         read_fds = master_fds;
-        if (select(max_fd + 1, &read_fds, &write_fds, NULL, &tv))
+        if (select(max_fd + 1, &read_fds, &write_fds, NULL, &tv) == -1)
         {
-            //error
+            log_write(ERROR, "Select function error");
+            continue;
         }
 
         if (FD_ISSET(proxy_socket, &read_fds))
@@ -235,10 +236,12 @@ run_proxy()
 
             int fd = curr_channel->front_fd;
 
+            /* Если фронт сокет готов к чтению, читаем данные с него в фронт буфер */
             if (FD_ISSET(fd, &read_fds))
             {   
                 printf("read data from front\n");
             }
+            /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету */
             if (FD_ISSET(fd, &write_fds))
             {
                 printf("write data from front\n");
@@ -246,10 +249,12 @@ run_proxy()
 
             fd = curr_channel->back_fd;
 
+            /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
              if (FD_ISSET(fd, &read_fds))
             {   
                 printf("read data from postgres\n");
             }
+            /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету */
             if (FD_ISSET(fd, &write_fds))
             {
                 printf("write data from postgres\n");
