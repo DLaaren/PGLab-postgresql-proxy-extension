@@ -28,11 +28,11 @@ typedef struct channel {
     char back_to_front[BUFFER_SIZE];
 } channel;
 
-void set_channel(int postgres_socket, int client_socket, channel *channel) {
+// static void set_channel(int postgres_socket, int client_socket, channel *channel) {
 
-}
+// }
 
-void
+static void
 handle_client_data(channel *channel)
 {
     int bytes_recieved = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
@@ -55,7 +55,7 @@ handle_client_data(channel *channel)
     log_write(INFO, "Sent data to postgres server\n");
 }
 
-void
+static void
 handle_postgres_data(channel *channel)
 {
     int bytes_recieved = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
@@ -79,7 +79,7 @@ handle_postgres_data(channel *channel)
     log_write(INFO, "Sent data to client\n");
 }
 
-int
+static int
 connect_postgres_server()
 {
     struct sockaddr_in postgres_server;
@@ -106,7 +106,7 @@ connect_postgres_server()
 }
 
 
-int
+static int
 accept_connection(int proxy_socket) 
 {
     struct sockaddr_in client_address;
@@ -125,7 +125,7 @@ accept_connection(int proxy_socket)
     return client_socket;
 }
 
-List *
+static List *
 create_channel(List *channels, int postgres_socket, int client_socket) /* хз в чем была проблема но я всё пофиксила лол */
 {
     /* idk what's wrong with palloc */
@@ -214,7 +214,7 @@ run_proxy()
         read_fds = master_fds;
         if (select(max_fd + 1, &read_fds, &write_fds, NULL, &tv) == -1)
         {
-            log_write(ERROR, "Select function error");
+            log_write(ERROR, "select()");
             continue;
         }
 
