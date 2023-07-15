@@ -122,6 +122,9 @@ accept_connection(int proxy_socket)
         log_write(ERROR, "Client connection accept error");
     }
 
+    printf("New connection from client: %s:%d\n",
+                           inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+    printf("Initiating connection between client and postgres server");
     return client_socket;
 }
 
@@ -185,7 +188,6 @@ run_proxy()
 
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
-
     printf("proxy socket is listening\n");
 
 
@@ -222,45 +224,43 @@ run_proxy()
         {
             client_socket = accept_connection(proxy_socket); /* cpu usage 100000)o)0o0 %%& */ /* LATER :: FIX IT CAUSE OTHERWISE MY PC WILL DIE*/
             postgres_socket = connect_postgres_server();
-            printf("has connection\n");
             max_fd = MAX(client_socket, postgres_socket);
             FD_SET(client_socket, &master_fds);
             FD_SET(postgres_socket, &master_fds);
-
             channels = create_channel(channels, postgres_socket, client_socket);
         }
 
-        foreach(cell, channels)
-        {
-            channel *curr_channel = lfirst(cell);
+        // foreach(cell, channels)
+        // {
+        //     channel *curr_channel = lfirst(cell);
 
-            int fd = curr_channel->front_fd;
+        //     int fd = curr_channel->front_fd;
 
-            /* Если фронт сокет готов к чтению, читаем данные с него в фронт буфер */
-            if (FD_ISSET(fd, &read_fds))
-            {   
-                printf("read data from front\n");
-            }
-            /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету */
-            if (FD_ISSET(fd, &write_fds))
-            {
-                printf("write data from front\n");
-            }
+        //     /* Если фронт сокет готов к чтению, читаем данные с него в фронт буфер */
+        //     if (FD_ISSET(fd, &read_fds))
+        //     {   
+        //         printf("read data from front\n");
+        //     }
+        //     /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету */
+        //     if (FD_ISSET(fd, &write_fds))
+        //     {
+        //         printf("write data from front\n");
+        //     }
 
-            fd = curr_channel->back_fd;
+        //     fd = curr_channel->back_fd;
 
-            /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
-             if (FD_ISSET(fd, &read_fds))
-            {   
-                printf("read data from postgres\n");
-            }
-            /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету */
-            if (FD_ISSET(fd, &write_fds))
-            {
-                printf("write data from postgres\n");
-            }
+        //     /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
+        //      if (FD_ISSET(fd, &read_fds))
+        //     {   
+        //         printf("read data from postgres\n");
+        //     }
+        //     /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету */
+        //     if (FD_ISSET(fd, &write_fds))
+        //     {
+        //         printf("write data from postgres\n");
+        //     }
 
-        }
+        // }
     }
 
     close(proxy_socket);

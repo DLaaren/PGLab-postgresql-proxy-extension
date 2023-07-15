@@ -33,7 +33,7 @@ proxy_main(Datum main_arg)
 void 
 _PG_init(void)
 {
-    elog(LOG, "proxy_server_bgw has began working.");
+    elog(LOG, "Proxy server has began working");
 
     BackgroundWorker proxy_bgw;
 
@@ -47,5 +47,4 @@ _PG_init(void)
     sprintf(proxy_bgw.bgw_type, "proxy_server");
 
     RegisterBackgroundWorker(&proxy_bgw);
-    elog(LOG, "proxy_server_bgw has been registered");
 }
