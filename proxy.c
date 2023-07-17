@@ -145,7 +145,7 @@ accept_connection(int proxy_socket)
 
     printf("New connection from client: %s:%d\n",
                            inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
-    printf("Initiating connection between client and postgres server");
+    printf("Initiating connection between client and postgres server\n");
     return client_socket;
 }
 
@@ -168,7 +168,7 @@ create_channel(List *channels, int postgres_socket, int client_socket) /* хз �
      */
     
     channels = lappend(channels, new_channel);
-    printf("channel has been created\n");
+    printf("Channel has been created\n");
     return channels;
 }
 
@@ -209,7 +209,7 @@ run_proxy()
 
     log_write(INFO, "The proxy server is running. Waiting for connections...");
 
-    printf("proxy socket is listening\n");
+    printf("Proxy is ready to accept connections\n");
 
 
     List *channels = NIL; // = (void *)0
@@ -227,8 +227,6 @@ run_proxy()
     FD_SET(proxy_socket, &master_fds);
     max_fd = proxy_socket;
 
-    printf("before the main loop\n");
-
     /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
     for (;;)
     {
@@ -242,7 +240,7 @@ run_proxy()
 
         if (FD_ISSET(proxy_socket, &read_fds))
         {
-            client_socket = accept_connection(proxy_socket); /* cpu usage 100000)o)0o0 %%& */ /* LATER :: FIX IT CAUSE OTHERWISE MY PC WILL DIE*/
+            client_socket = accept_connection(proxy_socket);
             postgres_socket = connect_postgres_server();
             max_fd = MAX(client_socket, postgres_socket);
             FD_SET(client_socket, &master_fds);
