@@ -21,63 +21,73 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+typedef enum idk {
+    FRONT_TO_BACK,
+    BACK_TO_FRONT
+} idk;
+
 typedef struct channel {
     int front_fd;                           /* client */
     int back_fd;                            /* postgres */
     char front_to_back[BUFFER_SIZE];
     char back_to_front[BUFFER_SIZE];
+    int bytes_received_from_client;
+    int bytes_received_from_postgres;
 } channel;
 
-// static void set_channel(int postgres_socket, int client_socket, channel *channel) {
 
-// }
-
-static void
-handle_client_data(channel *channel)
+static int
+write_data(channel *channel, int where_to_write)
 {
-    int bytes_recieved = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
-
-    if (bytes_recieved == -1)
+    int bytes_written = 0;
+    switch (where_to_write)
     {
-        log_write(ERROR, "Client's data reading error");
-    }
-    if (bytes_recieved == 0)
-    {
-        log_write(WARNING, "Client has lost connection");
-    }
+        case FRONT_TO_BACK:
+            if (channel->bytes_received_from_client > 0)
+            bytes_written = write(channel->back_fd, channel->front_to_back, channel->bytes_received_from_client);
+            break;
 
-    log_write(INFO, "Recieved %d bytes from client\n", bytes_recieved);
+        case BACK_TO_FRONT:
+            if (channel->bytes_received_from_postgres > 0)
+            bytes_written = write(channel->front_fd, channel->back_to_front, channel->bytes_received_from_postgres);
+            break;
 
-    if (write(channel->back_fd, channel->front_to_back, bytes_recieved) == -1)
-    {
-        log_write(ERROR, "Data sending to postgres error");
+        default:
+            /* error */
+            break;
     }
-    log_write(INFO, "Sent data to postgres server\n");
+    if (bytes_written == -1)
+    {
+        return -1;
+    }
 }
 
-static void
-handle_postgres_data(channel *channel)
+static int
+read_data(channel *channel, int where_to_read)
 {
-    int bytes_recieved = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
-
-    if (bytes_recieved == -1)
+    switch (where_to_read)
     {
-        log_write(ERROR, "Postgres' data reading error");
+        case FRONT_TO_BACK:
+            memset(channel->front_to_back, 0, BUFFER_SIZE);
+            channel->bytes_received_from_client = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
+            break;
+
+        case BACK_TO_FRONT:
+            memset(channel->back_to_front, 0, BUFFER_SIZE);
+            channel->bytes_received_from_postgres = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
+            break;
+
+        default:
+            /* error */
+            break;
     }
-    if (bytes_recieved == 0)
+    if (channel->bytes_received_from_client == -1 || channel->bytes_received_from_postgres == -1)
     {
-        log_write(WARNING, "Postgres has lost connection");
+        return -1;
     }
-
-
-    log_write(INFO, "Recieved from postgres server\n");
-
-    if (write(channel->front_fd, channel->back_to_front, bytes_recieved) == -1)
-    {
-        log_write(ERROR, "Data sending to client error");
-    }
-    log_write(INFO, "Sent data to client\n");
+    return 0;
 }
+
 
 static int
 connect_postgres_server()
@@ -209,7 +219,6 @@ run_proxy()
     printf("before the main loop\n");
 
     /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
-    int flag = 0;
     for (;;)
     {
         write_fds = master_fds;
@@ -230,37 +239,48 @@ run_proxy()
             channels = create_channel(channels, postgres_socket, client_socket);
         }
 
-        // foreach(cell, channels)
-        // {
-        //     channel *curr_channel = lfirst(cell);
+        foreach(cell, channels)
+        {
+            channel *curr_channel = lfirst(cell);
 
-        //     int fd = curr_channel->front_fd;
+            int fd = curr_channel->front_fd;
 
-        //     /* Если фронт сокет готов к чтению, читаем данные с него в фронт буфер */
-        //     if (FD_ISSET(fd, &read_fds))
-        //     {   
-        //         printf("read data from front\n");
-        //     }
-        //     /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету */
-        //     if (FD_ISSET(fd, &write_fds))
-        //     {
-        //         printf("write data from front\n");
-        //     }
+            /* Если фронт сокет готов к чтению, читаем данные с него во фронт буфер */
+            if (FD_ISSET(fd, &read_fds))
+            {   
+                if (read_data(curr_channel, FRONT_TO_BACK) == -1)
+                    foreach_delete_current(channels, cell);
+                printf("read data from front\n");
+                continue;
+            }
+            /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету постгресу */
+            if (FD_ISSET(fd, &write_fds))
+            {
+                if (write_data(curr_channel, FRONT_TO_BACK) == -1)
+                    foreach_delete_current(channels, cell);
+                printf("write data to front\n");
+                continue;
+            }
 
-        //     fd = curr_channel->back_fd;
+            fd = curr_channel->back_fd;
 
-        //     /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
-        //      if (FD_ISSET(fd, &read_fds))
-        //     {   
-        //         printf("read data from postgres\n");
-        //     }
-        //     /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету */
-        //     if (FD_ISSET(fd, &write_fds))
-        //     {
-        //         printf("write data from postgres\n");
-        //     }
-
-        // }
+            /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
+             if (FD_ISSET(fd, &read_fds))
+            {   
+                if (read_data(curr_channel, BACK_TO_FRONT) == -1)
+                    foreach_delete_current(channels, cell);
+                printf("read data from postgres\n");
+                continue;
+            }
+            /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету клиенту */
+            if (FD_ISSET(fd, &write_fds))
+            {
+                if (write_data(curr_channel, BACK_TO_FRONT) == -1)
+                    foreach_delete_current(channels, cell); 
+                printf("write data to postgres\n");
+                continue;
+            }
+        }
     }
 
     close(proxy_socket);

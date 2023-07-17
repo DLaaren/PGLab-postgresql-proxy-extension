@@ -33,6 +33,7 @@ proxy_main(Datum main_arg)
 void 
 _PG_init(void)
 {
+    /* LATER :: somethimes bgw exits with 1 exit code in the beginning */
     elog(LOG, "Proxy server has began working");
 
     BackgroundWorker proxy_bgw;
