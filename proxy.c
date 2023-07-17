@@ -68,12 +68,12 @@ read_data(channel *channel, int where_to_read)
     switch (where_to_read)
     {
         case FRONT_TO_BACK:
-            memset(channel->front_to_back, 0, BUFFER_SIZE);
+            //memset(channel->front_to_back, 0, BUFFER_SIZE);
             channel->bytes_received_from_client = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
             break;
 
         case BACK_TO_FRONT:
-            memset(channel->back_to_front, 0, BUFFER_SIZE);
+            //memset(channel->back_to_front, 0, BUFFER_SIZE);
             channel->bytes_received_from_postgres = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
             break;
 
@@ -249,7 +249,7 @@ run_proxy()
             if (FD_ISSET(fd, &read_fds))
             {   
                 if (read_data(curr_channel, FRONT_TO_BACK) == -1)
-                    foreach_delete_current(channels, cell);
+                    channels = foreach_delete_current(channels, cell);
                 printf("read data from front\n");
                 continue;
             }
@@ -257,7 +257,7 @@ run_proxy()
             if (FD_ISSET(fd, &write_fds))
             {
                 if (write_data(curr_channel, FRONT_TO_BACK) == -1)
-                    foreach_delete_current(channels, cell);
+                    channels = foreach_delete_current(channels, cell);
                 printf("write data to front\n");
                 continue;
             }
@@ -268,7 +268,7 @@ run_proxy()
              if (FD_ISSET(fd, &read_fds))
             {   
                 if (read_data(curr_channel, BACK_TO_FRONT) == -1)
-                    foreach_delete_current(channels, cell);
+                    channels = foreach_delete_current(channels, cell);
                 printf("read data from postgres\n");
                 continue;
             }
@@ -276,7 +276,7 @@ run_proxy()
             if (FD_ISSET(fd, &write_fds))
             {
                 if (write_data(curr_channel, BACK_TO_FRONT) == -1)
-                    foreach_delete_current(channels, cell); 
+                    channels = foreach_delete_current(channels, cell); 
                 printf("write data to postgres\n");
                 continue;
             }
