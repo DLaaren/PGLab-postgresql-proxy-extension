@@ -21,82 +21,64 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-typedef enum idk {
-    FRONT_TO_BACK,
-    BACK_TO_FRONT
-} idk;
-
 typedef struct channel {
     int front_fd;                           /* client */
     int back_fd;                            /* postgres */
     char front_to_back[BUFFER_SIZE];
     char back_to_front[BUFFER_SIZE];
-    int bytes_received_from_client;
-    int bytes_received_from_postgres;
+    int bytes_received_from_front;
+    int bytes_received_from_back;
 } channel;
 
 
 static int
-write_data(channel *channel, int where_to_write)
+read_data_front_to_back(channel *curr_channel)
 {
-    int bytes_written = 0;
-    switch (where_to_write)
-    {
-        case FRONT_TO_BACK:
-            if (channel->bytes_received_from_client > 0) 
-            {
-                bytes_written = write(channel->back_fd, channel->front_to_back, channel->bytes_received_from_client);
-                printf("write data to back: %d bytes %s\n", bytes_written, channel->front_to_back);
-                memset(channel->front_to_back, 0, BUFFER_SIZE);
-            }
-            break;
-
-        case BACK_TO_FRONT:
-            if (channel->bytes_received_from_postgres > 0)
-            {
-                bytes_written = write(channel->front_fd, channel->back_to_front, channel->bytes_received_from_postgres);
-                printf("write data to front: %d bytes %s\n", bytes_written, channel->back_to_front);
-                memset(channel->back_to_front, 0, BUFFER_SIZE);
-            }
-            break;
-
-        default:
-            /* error */
-            break;
-    }
-    if (bytes_written == -1)
+    curr_channel->bytes_received_from_front = read(curr_channel->front_fd, curr_channel->front_to_back, BUFFER_SIZE);
+    if (curr_channel->bytes_received_from_front == -1)
     {
         return -1;
+    }
+    return 0;
+}
+
+static int
+read_data_back_to_front(channel *curr_channel)
+{
+    curr_channel->bytes_received_from_back = read(curr_channel->back_fd, curr_channel->back_to_front, BUFFER_SIZE);
+    if (curr_channel->bytes_received_from_back == -1)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+write_data_front_to_back(channel * curr_channel)
+{
+    int bytes_written = 0;
+    if (curr_channel->bytes_received_from_front > 0) 
+    {
+        bytes_written = write(curr_channel->back_fd, curr_channel->front_to_back, curr_channel->bytes_received_from_front);
+        // printf("write data to back: %d bytes %s\n", bytes_written, curr_channel->front_to_back);
+        memset(curr_channel->front_to_back, 0, BUFFER_SIZE);
+        curr_channel->bytes_received_from_front = 0;
     }
     return bytes_written;
 }
 
 static int
-read_data(channel *channel, int where_to_read)
+write_data_back_to_front(channel * curr_channel)
 {
-    switch (where_to_read)
+    int bytes_written = 0;
+    if (curr_channel->bytes_received_from_back > 0)
     {
-        case FRONT_TO_BACK:
-            // memset(channel->front_to_back, 0, BUFFER_SIZE);
-            channel->bytes_received_from_client = read(channel->front_fd, channel->front_to_back, BUFFER_SIZE);
-            printf("read from front %d bytes %s\n", channel->bytes_received_from_client, channel->front_to_back);
-            break;
-
-        case BACK_TO_FRONT:
-            // memset(channel->back_to_front, 0, BUFFER_SIZE);
-            channel->bytes_received_from_postgres = read(channel->back_fd, channel->back_to_front, BUFFER_SIZE);
-            printf("read from back %d bytes %s\n", channel->bytes_received_from_postgres, channel->back_to_front);
-            break;
-
-        default:
-            /* error */
-            break;
+        bytes_written = write(curr_channel->front_fd, curr_channel->back_to_front, curr_channel->bytes_received_from_back);
+        // printf("write data to front: %d bytes %s\n", bytes_written, curr_channel->back_to_front);
+        memset(curr_channel->back_to_front, 0, BUFFER_SIZE);
+        curr_channel->bytes_received_from_back = 0;
     }
-    if (channel->bytes_received_from_client == -1 || channel->bytes_received_from_postgres == -1)
-    {
-        return -1;
-    }
-    return 0;
+    return bytes_written;
 }
 
 
@@ -108,7 +90,7 @@ connect_postgres_server()
     int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (postgres_socket == -1)
     {
-        log_write(ERROR, "Proxy socket creating error");
+        printf("Proxy socket creating error\n");
         exit(1);
     }
 
@@ -118,11 +100,11 @@ connect_postgres_server()
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
-        log_write(ERROR, "Socket binding error");
+        printf("Socket binding error\n");
         exit(1);
     }
 
-    log_write(INFO, "Proxy has connected to postgres server");
+    printf("Proxy has connected to postgres server\n");
     return postgres_socket;
 }
 
@@ -130,27 +112,28 @@ connect_postgres_server()
 static int
 accept_connection(int proxy_socket) 
 {
+    int client_socket;
     struct sockaddr_in client_address;
+    socklen_t client_len;
 
     client_address.sin_family = AF_INET;
     client_address.sin_port = htons(POSTGRES_CURR_PORT);
     client_address.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
-    socklen_t client_len = sizeof(client_address);
+    client_len = sizeof(client_address);
 
-    int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
+    client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
-        log_write(ERROR, "Client connection accept error");
+        printf("Client connection accept error\n");
     }
 
     printf("New connection from client: %s:%d\n",
                            inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
-    printf("Initiating connection between client and postgres server\n");
     return client_socket;
 }
 
 static List *
-create_channel(List *channels, int postgres_socket, int client_socket) /* хз в чем была проблема но я всё пофиксила лол */
+create_channel(List *channels, int postgres_socket, int client_socket)
 {
     /* idk what's wrong with palloc */
     /*
@@ -160,15 +143,7 @@ create_channel(List *channels, int postgres_socket, int client_socket) /* хз �
     channel *new_channel = (channel *)calloc(1, sizeof(channel));
     new_channel->back_fd = postgres_socket;
     new_channel->front_fd = client_socket;
-    /*
-     *  Append a pointer to the list. A pointer to the modified list is
-     *  returned. Note that this function may or may not destructively
-     *  value, rather than continuing to use the pointer passed as the
-     *  first argument.
-     */
-    
     channels = lappend(channels, new_channel);
-    printf("Channel has been created\n");
     return channels;
 }
 
@@ -183,13 +158,9 @@ run_proxy()
     proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (proxy_socket == -1)
     {
-        log_write(ERROR, "Proxy socket creating error");
+        printf("Proxy socket creating error\n");
         exit(1);
     }
-
-    /* bullshit ---> proxy exits with code 1 because of non-blocking accept */
-    //int proxy_socket_flags = fcntl(proxy_socket, F_GETFL);
-    //fcntl(proxy_socket, F_SETFL, proxy_socket_flags | O_NONBLOCK);
 
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
@@ -197,23 +168,21 @@ run_proxy()
 
     if (bind(proxy_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
-        log_write(ERROR, "Proxy's socket binding error");
+        printf("Proxy's socket binding error\n");
         exit(1);
     }
 
     if (listen(proxy_socket, MAX_CLIENTS) == -1)
     {
-        log_write(ERROR, "Proxy's socket listening error");
+        printf("Proxy's socket listening error\n");
         exit(1);
     }
 
-    log_write(INFO, "The proxy server is running. Waiting for connections...");
-
-    printf("Proxy is ready to accept connections\n");
+    printf("The proxy server is running. Waiting for connections...\n");
 
 
-    List *channels = NIL; // = (void *)0
-    const ListCell *cell = NULL;
+    List *channels = NIL; /* = (void *)0  */
+    ListCell *cell = NULL;
 
     fd_set master_fds, read_fds, write_fds;
     int max_fd;
@@ -227,17 +196,18 @@ run_proxy()
     FD_SET(proxy_socket, &master_fds);
     max_fd = proxy_socket;
 
-    /* нужно также смотреть какие каналы недействительны и закрывать дескрипторы */
     for (;;)
     {
+        // printf("\n            new iteration\n");
         write_fds = master_fds;
         read_fds = master_fds;
         if (select(max_fd + 1, &read_fds, &write_fds, NULL, &tv) == -1)
         {
-            log_write(ERROR, "select()");
+            printf("select() error\n");
             continue;
         }
 
+        /* if proxy socket is ready to accept connection then accept it and create channel */
         if (FD_ISSET(proxy_socket, &read_fds))
         {
             client_socket = accept_connection(proxy_socket);
@@ -246,76 +216,76 @@ run_proxy()
             FD_SET(client_socket, &master_fds);
             FD_SET(postgres_socket, &master_fds);
             channels = create_channel(channels, postgres_socket, client_socket);
+            printf("channel has been created\n");
         }
 
         foreach(cell, channels)
         {
-            channel *curr_channel = lfirst(cell);
-
+            channel *curr_channel = lfirst(cell); /* Macros to access the data values within List cells. */
+            
             int fd = curr_channel->front_fd;
 
-
-            /* Если фронт сокет готов к чтению, читаем данные с него во фронт буфер */
+            /* if front is ready to send data then read data to buffer */
             if (FD_ISSET(fd, &read_fds))
             {   
-                if (read_data(curr_channel, FRONT_TO_BACK) == -1)
+                if (read_data_front_to_back(curr_channel) == -1)
                 {
                     channels = foreach_delete_current(channels, cell);
-                    printf("1\n");
-                    continue;
+                    printf("channel has been deleted 1\n");
+                    // continue;
+                    goto exit_loop;
                 }
-                printf("aboba 1\n");
             }
 
             fd = curr_channel->back_fd;
 
-            /* Если же он готов к записи, то пишем из фронт буфера и отправляем по сокету постгресу */
+            /* if back is ready to get data then write data from buffer to back socket */
             if (FD_ISSET(fd, &write_fds))
             {
-                if (write_data(curr_channel, FRONT_TO_BACK) == -1)
+                if (write_data_front_to_back(curr_channel) == -1)
                 {
                     channels = foreach_delete_current(channels, cell);
-                    printf("2\n");
-                    continue;
+                    printf("channel has been deleted 2\n");
+                    // continue;
+                    goto exit_loop;
                 }
 
             }
 
             fd = curr_channel->back_fd;
 
-            /* Если бэкенд сокет готов к чтению, читаем данные с него в бэкенд буфер */
+            /* if back is ready to send data then read data to buffer */
              if (FD_ISSET(fd, &read_fds))
             {   
-                if (read_data(curr_channel, BACK_TO_FRONT) == -1)
+                if (read_data_back_to_front(curr_channel) == -1)
                 {
                     channels = foreach_delete_current(channels, cell);
-                    printf("3\n");
-                    continue;
+                    printf("channel has been deleted 3\n");
+                    // continue;
+                    goto exit_loop;
                 }
-                printf("aboaba 2\n");
             }
 
             fd = curr_channel->front_fd;
-            /* Если же он готов к записи, то пишем из бэкенд буфера и отправляем по сокету клиенту */
+            /* if front is ready to get data then write data from buffer to front socket */
             if (FD_ISSET(fd, &write_fds))
             {
-                if (write_data(curr_channel, BACK_TO_FRONT) == -1)
+                if (write_data_back_to_front(curr_channel) == -1)
                 {
                     channels = foreach_delete_current(channels, cell);
-                    printf("4\n");
-                    continue; 
+                    printf("channel has been deleted 4\n");
+                    // continue; 
+                    goto exit_loop;
                 }
 
             }
-            printf("new iterations\n");
-            sleep(1);
         }
     }
 
-    close(proxy_socket);
+    exit_loop : close(proxy_socket);
     list_free(channels);
 
-    log_write(INFO, "All sockets were closed. Proxy server is shutting down...");
+    printf("All sockets were closed. Proxy server is shutting down...\n");
 
     log_close();
 }
