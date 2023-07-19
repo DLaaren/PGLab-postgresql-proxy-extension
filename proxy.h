@@ -4,6 +4,7 @@
 /*
  * Start proxy
  */
-void run_proxy();
+extern void
+run_proxy();
 
 #endif /* PROXY_H */
