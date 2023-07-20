@@ -2,9 +2,9 @@
 #define PROXY_LOG_H
 
 typedef enum MessageType {
-    INFO,
-    WARNING,
-    ERROR
+    LOG_INFO,
+    LOG_WARNING,
+    LOG_ERROR
 } MessageType;
 
 /* 

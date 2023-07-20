@@ -17,9 +17,9 @@ typedef struct ProxyLog
 ProxyLog proxy_log;
 
 char *log_type_names[] = {
-    "INFO",
-    "WARNING",
-    "ERROR"
+    "LOG_INFO",
+    "LOG_WARNING",
+    "LOG_ERROR"
 };
 
 void write_format();
@@ -57,7 +57,7 @@ log_write(MessageType type, char *message, ...)
     va_end(vl);
 
     /* Writes reason of error. */
-    if (type != INFO && errno != 0) {
+    if (type != LOG_INFO && errno != 0) {
         fprintf(proxy_log.file, "\n%s.\nProcess [%d] caused error with code %d.", strerror(errno), getpid(), errno);
         errno = 0;
     }
