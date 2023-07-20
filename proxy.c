@@ -41,6 +41,11 @@ read_data_front_to_back(channel *curr_channel)
         log_write(ERROR, "error while reading from front to back");
         return -1;
     }
+    if (curr_channel->bytes_received_from_front == 0)
+    {
+        log_write(INFO, "connection has been lost");
+        return -1;
+    } 
     return 0;
 }
 
@@ -53,6 +58,11 @@ read_data_back_to_front(channel *curr_channel)
         log_write(ERROR, "error while reading from back to front");
         return -1;
     }
+    if (curr_channel->bytes_received_from_back == 0)
+    {
+        log_write(INFO, "connection has been lost");
+        return -1;
+    } 
     return 0;
 }
 
@@ -81,7 +91,6 @@ write_data_back_to_front(channel * curr_channel)
     if (curr_channel->bytes_received_from_back > 0)
     {
         bytes_written = write(curr_channel->front_fd->fd, curr_channel->back_to_front, curr_channel->bytes_received_from_back);
-        printf("write data to front: %d bytes %s\n", bytes_written, curr_channel->back_to_front);
         memset(curr_channel->back_to_front, 0, BUFFER_SIZE);
         curr_channel->bytes_received_from_back = 0;
     }
@@ -151,12 +160,31 @@ create_channel(List *channels, struct pollfd *postgres_socket, struct pollfd *cl
     return channels;
 }
 
+static void
+delete_channel(channel *curr_channel, struct pollfd *fds, size_t *fds_len)
+{
+    close(curr_channel->front_fd->fd);
+    close(curr_channel->back_fd->fd);
+
+    /* resizing array of fds */
+    while (*fds_len > 0 && fds[*fds_len - 1].fd == -1)
+    {
+        (*fds_len)--;
+    }
+    for (size_t j = *fds_len - 2; j >= 1; j--)
+    {
+        if (fds[j].fd == -1)
+        {
+            memmove(fds + j, fds + j + 1, sizeof(struct pollfd) * (*fds_len - j - 1));
+            (*fds_len)--;
+        }
+    }
+}
+
     /* TODO :: write timeouts for read and write */
-    /* rearrange array with fds after deleting */
-    /* add check for closed sockets */
     /* SIGINT SIGEXIT and postgres' signals handler */
-    /* proxy does not delete channel after quiting psql (using \q) */
     /* add function to on/off logs*/
+    /* QUESTION :: should we retry write/read if there was error not just close connection */
 
 void 
 run_proxy()
@@ -212,8 +240,8 @@ run_proxy()
         }
 
         /* if proxy socket is ready to accept connection then accept it and create channel */
-        if (fds[0].revents & POLLIN)
-        {
+        if ((fds[0].revents & POLLIN) && fds_len < MAX_CHANNELS * 2 + 1)
+        { 
             client_socket = accept_connection(proxy_socket);
             if (client_socket == -1)
             {
@@ -244,8 +272,7 @@ run_proxy()
             {   
                 if (read_data_front_to_back(curr_channel) == -1)
                 {
-                    close(curr_channel->front_fd->fd);
-                    close(curr_channel->back_fd->fd);
+                    delete_channel(curr_channel, fds, &fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue;
@@ -259,8 +286,7 @@ run_proxy()
             {
                 if (write_data_front_to_back(curr_channel) == -1)
                 {
-                    close(curr_channel->front_fd->fd);
-                    close(curr_channel->back_fd->fd);
+                    delete_channel(curr_channel, fds, &fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue;
@@ -273,8 +299,7 @@ run_proxy()
             {   
                 if (read_data_back_to_front(curr_channel) == -1)
                 {
-                    close(curr_channel->front_fd->fd);
-                    close(curr_channel->back_fd->fd);
+                    delete_channel(curr_channel, fds, &fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue;
@@ -288,8 +313,7 @@ run_proxy()
             {
                 if (write_data_back_to_front(curr_channel) == -1)
                 {
-                    close(curr_channel->front_fd->fd);
-                    close(curr_channel->back_fd->fd);
+                    delete_channel(curr_channel, fds, &fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue; 
@@ -301,7 +325,7 @@ run_proxy()
 
     /* sorry but there is doule for */
     finalyze:
-    log_write(INFO, "closing all fds");
+    log_write(INFO, "closing all fds...");
     for (int i = 1; i < fds_len; i++) {
         if (fds[i].fd != -1) {
             close(fds[i].fd);
@@ -311,7 +335,7 @@ run_proxy()
     close(proxy_socket);
     list_free(channels);
 
-    log_write(INFO, "proxy server is shutting down...\n");
+    log_write(INFO, "proxy server is shutting down...");
 
     log_close();
 }
