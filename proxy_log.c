@@ -10,7 +10,7 @@
 
 typedef struct ProxyLog
 {
-    FILE* file;
+    FILE *file;
 } ProxyLog;
 
 
@@ -27,6 +27,7 @@ void write_format();
 void 
 log_open()
 {
+
     proxy_log.file = fopen("logfile.log", "w");
     if (NULL == proxy_log.file)
     {

@@ -9,7 +9,6 @@
 
 #include "c.h"
 #include "nodes/pg_list.h"
-#include "utils/wait_event.h"
 
 #include "proxy.h"
 #include "proxy_log.h"
@@ -146,7 +145,7 @@ accept_connection(int proxy_socket)
     }
 
     log_write(INFO, "new connection from client: %s:%d",
-                           inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+                    inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
     return client_socket;
 }
 
@@ -160,31 +159,48 @@ create_channel(List *channels, struct pollfd *postgres_socket, struct pollfd *cl
     return channels;
 }
 
-static void
-delete_channel(channel *curr_channel, struct pollfd *fds, size_t *fds_len)
+static size_t
+delete_channel(channel *curr_channel, struct pollfd *fds, size_t fds_len)
 {
+    printf("closing :%d and %d\n\n", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
     close(curr_channel->front_fd->fd);
     close(curr_channel->back_fd->fd);
 
+    curr_channel->front_fd->fd = -1;
+    curr_channel->back_fd->fd = -1;
+
     /* resizing array of fds */
-    while (*fds_len > 0 && fds[*fds_len - 1].fd == -1)
+    while (fds_len > 0 && fds[fds_len - 1].fd == -1)
     {
-        (*fds_len)--;
+        fds_len--;
     }
-    for (size_t j = *fds_len - 2; j >= 1; j--)
+
+    for (size_t i = 0; i < fds_len; i++)
     {
-        if (fds[j].fd == -1)
+        while (fds[i].fd == -1)
         {
-            memmove(fds + j, fds + j + 1, sizeof(struct pollfd) * (*fds_len - j - 1));
-            (*fds_len)--;
+            memmove(fds + i, fds + i + 1, sizeof(struct pollfd) * (fds_len - 1 - i));
+            fds_len--;
         }
     }
+
+    printf("fds_len %ld\n", fds_len);
+        for (size_t i = 0; i < fds_len; i++)
+        {
+            printf("%d ", fds[i].fd);
+        }
+        printf("\n\n");
+
+    return fds_len;
 }
 
     /* TODO :: write timeouts for read and write */
     /* SIGINT SIGEXIT and postgres' signals handler */
-    /* add function to on/off logs*/
+    /* add function to on/off logs */
     /* QUESTION :: should we retry write/read if there was error not just close connection */
+    /* background worker exited with exit code 1  ---  restart proxy in that way*/
+    /* TODO:: Спросить у Рутмана стоит ли переделать проксю на unix сокеты */
+    /* problems with deleting channels --- выявила пока тестировала pgbench'ом */
 
 void 
 run_proxy()
@@ -224,8 +240,8 @@ run_proxy()
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
     
-    struct pollfd fds[MAX_CHANNELS * 2 + 1];
-    size_t fds_len = 1;
+    struct pollfd fds[MAX_CHANNELS * 2 + 1]; /* 'cause we have 2 fds in one channel + 1 for proxy socket */
+    size_t fds_len = 1; /* max free idx of array of fds */
     memset(fds, 0 , sizeof(fds));
     fds[0].fd = proxy_socket;
     fds[0].events = POLLIN;
@@ -252,14 +268,22 @@ run_proxy()
             {
                 goto finalyze;
             }
-            fds[fds_len].fd = postgres_socket;
+            fds[fds_len].fd = client_socket;
             fds[fds_len].events = POLLIN | POLLOUT;
             fds_len++;
-            fds[fds_len].fd = client_socket;
+            fds[fds_len].fd = postgres_socket;
             fds[fds_len].events = POLLIN | POLLOUT;
             fds_len++;
             channels = create_channel(channels, &(fds[fds_len - 2]), &(fds[fds_len - 1]));
             log_write(INFO, "new channel has been created\n");
+            
+
+            printf("fds_len %ld\n", fds_len);
+            for (size_t i = 0; i < fds_len; i++)
+            {
+                printf("%d ", fds[i].fd);
+            }
+            printf("\n\n");
         }
 
         foreach(cell, channels)
@@ -272,10 +296,38 @@ run_proxy()
             {   
                 if (read_data_front_to_back(curr_channel) == -1)
                 {
-                    delete_channel(curr_channel, fds, &fds_len);
+                    fds_len = delete_channel(curr_channel, fds, fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue;
+                }
+            }
+
+            curr_fd = curr_channel->back_fd;
+
+            /* if back is ready to send data then read data to buffer */
+             if (curr_fd->revents & POLLIN)
+            {   
+                if (read_data_back_to_front(curr_channel) == -1)
+                {
+                    fds_len = delete_channel(curr_channel, fds, fds_len);
+                    channels = foreach_delete_current(channels, cell);
+                    log_write(WARNING, "channel has been deleted");
+                    continue;
+                }
+            }
+
+            curr_fd = curr_channel->front_fd;
+
+            /* if front is ready to get data then write data from buffer to front socket */
+            if (curr_fd->revents & POLLOUT)
+            {
+                if (write_data_back_to_front(curr_channel) == -1)
+                {
+                    fds_len = delete_channel(curr_channel, fds, fds_len);
+                    channels = foreach_delete_current(channels, cell);
+                    log_write(WARNING, "channel has been deleted");
+                    continue; 
                 }
             }
 
@@ -286,39 +338,11 @@ run_proxy()
             {
                 if (write_data_front_to_back(curr_channel) == -1)
                 {
-                    delete_channel(curr_channel, fds, &fds_len);
+                    fds_len = delete_channel(curr_channel, fds, fds_len);
                     channels = foreach_delete_current(channels, cell);
                     log_write(WARNING, "channel has been deleted");
                     continue;
                 }
-
-            }
-
-            /* if back is ready to send data then read data to buffer */
-             if (curr_fd->revents & POLLIN)
-            {   
-                if (read_data_back_to_front(curr_channel) == -1)
-                {
-                    delete_channel(curr_channel, fds, &fds_len);
-                    channels = foreach_delete_current(channels, cell);
-                    log_write(WARNING, "channel has been deleted");
-                    continue;
-                }
-            }
-
-            curr_fd = curr_channel->front_fd;
-            
-            /* if front is ready to get data then write data from buffer to front socket */
-            if (curr_fd->revents & POLLOUT)
-            {
-                if (write_data_back_to_front(curr_channel) == -1)
-                {
-                    delete_channel(curr_channel, fds, &fds_len);
-                    channels = foreach_delete_current(channels, cell);
-                    log_write(WARNING, "channel has been deleted");
-                    continue; 
-                }
-
             }
         }
     }
