@@ -15,7 +15,7 @@
 // #include "proxy_manager.h"
 
 #define BUFFER_SIZE 1024
-#define MAX_CHANNELS 100
+#define MAX_CHANNELS 10
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
 #define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
@@ -37,15 +37,15 @@ read_data_front_to_back(channel *curr_channel)
     curr_channel->bytes_received_from_front = read(curr_channel->front_fd->fd, curr_channel->front_to_back, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_front == -1)
     {
-        log_write(LOG_ERROR, "error while reading from front (fd %d) to back", curr_channel->front_fd->fd);
+        log_write(ERROR, "error while reading from front (fd %d) to back", curr_channel->front_fd->fd);
         return -1;
     }
     if (curr_channel->bytes_received_from_front == 0)
     {
-        log_write(LOG_INFO, "connection has been lost");
+        log_write(INFO, "connection has been lost");
         return -1;
     }
-    log_write(LOG_INFO, "read from front (fd %d) to back %d bytes", curr_channel->front_fd->fd, curr_channel->bytes_received_from_front);
+    log_write(INFO, "read from front (fd %d) to back %d bytes", curr_channel->front_fd->fd, curr_channel->bytes_received_from_front);
     return 0;
 }
 
@@ -55,15 +55,15 @@ read_data_back_to_front(channel *curr_channel)
     curr_channel->bytes_received_from_back = read(curr_channel->back_fd->fd, curr_channel->back_to_front, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_back == -1)
     {
-        log_write(LOG_ERROR, "error while reading from back (fd %d) to front", curr_channel->back_fd->fd);
+        log_write(ERROR, "error while reading from back (fd %d) to front", curr_channel->back_fd->fd);
         return -1;
     }
     if (curr_channel->bytes_received_from_back == 0)
     {
-        log_write(LOG_INFO, "connection has been lost");
+        log_write(INFO, "connection has been lost");
         return -1;
     } 
-    log_write(LOG_INFO, "read from back (fd %d) to front %d bytes", curr_channel->back_fd->fd, curr_channel->bytes_received_from_back);
+    log_write(INFO, "read from back (fd %d) to front %d bytes", curr_channel->back_fd->fd, curr_channel->bytes_received_from_back);
     return 0;
 }
 
@@ -74,14 +74,14 @@ write_data_front_to_back(channel * curr_channel)
     if (curr_channel->bytes_received_from_front > 0) 
     {
         bytes_written = write(curr_channel->back_fd->fd, curr_channel->front_to_back, curr_channel->bytes_received_from_front);
-        log_write(LOG_INFO, "write to back (fd %d) %d bytes", curr_channel->back_fd->fd, bytes_written);
+        log_write(INFO, "write to back (fd %d) %d bytes", curr_channel->back_fd->fd, bytes_written);
 
         memset(curr_channel->front_to_back, 0, BUFFER_SIZE);
         curr_channel->bytes_received_from_front = 0;
     }
     if (bytes_written == -1)
     {
-        log_write(LOG_ERROR, "error while writing from front to back (fd %d)", curr_channel->back_fd->fd);
+        log_write(ERROR, "error while writing from front to back (fd %d)", curr_channel->back_fd->fd);
         return -1;
     }
     return 0;
@@ -94,14 +94,14 @@ write_data_back_to_front(channel * curr_channel)
     if (curr_channel->bytes_received_from_back > 0)
     {
         bytes_written = write(curr_channel->front_fd->fd, curr_channel->back_to_front, curr_channel->bytes_received_from_back);
-        log_write(LOG_INFO, "write to front (fd %d) %d bytes", curr_channel->front_fd->fd, bytes_written);
+        log_write(INFO, "write to front (fd %d) %d bytes", curr_channel->front_fd->fd, bytes_written);
 
         memset(curr_channel->back_to_front, 0, BUFFER_SIZE);
         curr_channel->bytes_received_from_back = 0;
     }
     if (bytes_written == -1)
     {
-        log_write(LOG_ERROR, "error while writing from back to front (fd %d)", curr_channel->front_fd->fd);
+        log_write(ERROR, "error while writing from back to front (fd %d)", curr_channel->front_fd->fd);
         return -1;
     }
     return 0;
@@ -113,7 +113,7 @@ connect_postgres_server()
     int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (postgres_socket == -1)
     {
-        log_write(LOG_ERROR, "error while creating postgres socket");
+        log_write(ERROR, "error while creating postgres socket");
         return -1;
     }
 
@@ -124,11 +124,11 @@ connect_postgres_server()
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
-        log_write(LOG_ERROR, "error while binding postgres socket");
+        log_write(ERROR, "error while binding postgres socket");
         return -1;
     }
 
-    log_write(LOG_INFO, "proxy has connected to postgres server successfully (fd %d)", postgres_socket);
+    log_write(INFO, "proxy has connected to postgres server successfully (fd %d)", postgres_socket);
     return postgres_socket;
 }
 
@@ -146,58 +146,81 @@ accept_connection(int proxy_socket)
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
-        log_write(LOG_ERROR, "error while accepting a connection from front");
+        log_write(ERROR, "error while accepting a connection from front");
         return -1;
     }
 
-    log_write(LOG_INFO, "new connection from client: %s:%d (fd %d)",
+    log_write(INFO, "new connection from client: %s:%d (fd %d)",
                            inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), client_socket);
     return client_socket;
 }
 
 static List *
-create_channel(List *channels, struct pollfd *postgres_socket, struct pollfd *client_socket)
+create_channel(List *channels, struct pollfd *fds, int fds_len, int postgres_socket, int client_socket)
 {
     channel *new_channel = (channel *)calloc(1, sizeof(channel));
-    new_channel->back_fd = postgres_socket;
-    new_channel->front_fd = client_socket;
-    channels = lappend(channels, new_channel);
-    return channels;
-}
 
-static size_t
-delete_channel(int front_fd, int back_fd, struct pollfd *fds, size_t fds_len)
-{
-    printf("closing :%d and %d\n\n", front_fd, back_fd);
-    close(front_fd);
-    close(back_fd);
-
-    /* resizing array of fds */
-    for (size_t i = 0; i < fds_len; i++)
+    bool postgres_fd_inserted = false;
+    bool client_fd_inserted = false;
+    for (size_t idx = 1; idx < fds_len; idx++)
     {
-        while (fds[i].fd == front_fd || fds[i].fd == back_fd)
+        if (fds[idx].fd == -1 && client_fd_inserted == false)
         {
-            memmove(fds + i, fds + i + 1, sizeof(struct pollfd) * (fds_len - 1 - i));
-            fds_len--;
+            fds[idx].fd = client_socket;
+            fds[idx].events = POLLIN | POLLOUT;
+            new_channel->front_fd = &(fds[idx]);
+            client_fd_inserted = true;
+        }
+        if (fds[idx].fd == -1 && postgres_fd_inserted == false)
+        {
+            fds[idx].fd = postgres_socket;
+            fds[idx].events = POLLIN | POLLOUT;
+            new_channel->back_fd = &(fds[idx]);
+            postgres_fd_inserted = true;
+        }
+        if (client_fd_inserted == true && postgres_fd_inserted == true)
+        {
+            break;
         }
     }
 
-    printf("fds_len %ld\n", fds_len);
-        for (size_t i = 0; i < fds_len; i++)
-        {
-            printf("%d ", fds[i].fd);
-        }
-        printf("\n\n");
+    if (client_fd_inserted == false || postgres_fd_inserted == false)
+    {
+        free(new_channel);
+        return channels;
+    }
+    channels = lappend(channels, new_channel);
 
-    return fds_len;
+    // for (size_t idx = 0; idx < MAX_CHANNELS*2 + 1; idx++)
+    // {
+    //     printf("%d ", fds[idx].fd);
+    // }
+    // printf("\n\n");
+
+    return channels;
 }
 
-    /* TODO :: write timeouts for read and write */
+static void
+delete_channel(channel *curr_channel, struct pollfd *fds)
+{
+    close(curr_channel->front_fd->fd);
+    close(curr_channel->back_fd->fd);
+
+    curr_channel->front_fd->fd = -1;
+    curr_channel->back_fd->fd = -1;
+
+    // for (size_t idx = 0; idx < MAX_CHANNELS*2 + 1; idx++)
+    // {
+    //     printf("%d ", fds[idx].fd);
+    // }
+    // printf("\n\n");
+}
+
+    /* listen different ports */
+
     /* SIGINT SIGEXIT and postgres' signals handler */
     /* add function to on/off logs */
-    /* QUESTION :: should we retry write/read if there was error not just close connection */
-    /* background worker exited with exit code 1  ---  restart proxy in that way*/
-    /* TODO:: Спросить стоит ли переделать проксю (слушает на tcp а пишет постгресу на unix socket) */
+    /* background worker exited with exit code 1  ---  restart proxy in that way */
     /* problems with deleting channels --- выявила пока тестировала pgbench'ом */
 
 void 
@@ -208,7 +231,7 @@ run_proxy()
     int proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (proxy_socket == -1)
     {
-        log_write(LOG_ERROR, "error while creating proxy socket");
+        log_write(ERROR, "error while creating proxy socket");
         exit(1);
     }
 
@@ -219,19 +242,19 @@ run_proxy()
 
     if (bind(proxy_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
-        log_write(LOG_ERROR, "error while binding proxy socket");
+        log_write(ERROR, "error while binding proxy socket");
         close(proxy_socket);
         exit(1);
     }
 
     if (listen(proxy_socket, MAX_CHANNELS) == -1)
     {
-        log_write(LOG_ERROR, "error while listening from proxy socket");
+        log_write(ERROR, "error while listening from proxy socket");
         close(proxy_socket);
         exit(1);
     }
 
-    log_write(LOG_INFO, "proxy server is running and waiting for connections...");
+    log_write(INFO, "proxy server is running and waiting for connections...");
 
 
     List *channels = NIL;
@@ -239,8 +262,8 @@ run_proxy()
     int postgres_socket, client_socket;
     
     struct pollfd fds[MAX_CHANNELS * 2 + 1]; /* 'cause we have 2 fds in one channel + 1 for proxy socket */
-    size_t fds_len = 1; /* max free idx of array of fds */
-    memset(fds, 0 , sizeof(fds));
+    size_t fds_len = MAX_CHANNELS * 2 + 1; /* max free idx of array of fds */
+    memset(fds, -1, sizeof(fds));
     fds[0].fd = proxy_socket;
     fds[0].events = POLLIN;
 
@@ -249,12 +272,12 @@ run_proxy()
         int err = poll(fds, fds_len, -1);
         if (err == -1)
         {
-            log_write(LOG_ERROR, "error during poll()");
+            log_write(ERROR, "error during poll()");
             goto finalyze;
         }
 
         /* if proxy socket is ready to accept connection then accept it and create channel */
-        if ((fds[0].revents & POLLIN) && fds_len < MAX_CHANNELS * 2 + 1)
+        if ((fds[0].revents & POLLIN))
         { 
             client_socket = accept_connection(proxy_socket);
             if (client_socket == -1)
@@ -266,21 +289,8 @@ run_proxy()
             {
                 goto finalyze;
             }
-            fds[fds_len].fd = client_socket;
-            fds[fds_len].events = POLLIN | POLLOUT;
-            fds_len++;
-            fds[fds_len].fd = postgres_socket;
-            fds[fds_len].events = POLLIN | POLLOUT;
-            fds_len++;
-            channels = create_channel(channels, &(fds[fds_len - 1]), &(fds[fds_len - 2]));
-            log_write(LOG_INFO, "new channel has been created");
-
-            printf("fds_len %ld\n", fds_len);
-            for (size_t i = 0; i < fds_len; i++)
-            {
-                printf("%d ", fds[i].fd);
-            }
-            printf("\n\n");
+            channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
+            log_write(INFO, "new channel has been created");
         }
 
         foreach(cell, channels)
@@ -293,9 +303,9 @@ run_proxy()
             {   
                 if (read_data_front_to_back(curr_channel) == -1)
                 {
-                    log_write(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    log_write(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
-                    // fds_len = delete_channel(front_fd_tmp, back_fd_tmp, fds, fds_len);
+                    delete_channel(curr_channel, fds);
                     continue;
                 }
             }
@@ -307,9 +317,9 @@ run_proxy()
             {
                 if (write_data_front_to_back(curr_channel) == -1)
                 {
-                    log_write(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    log_write(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
-                    // fds_len = delete_channel(curr_channel, fds, fds_len);
+                    delete_channel(curr_channel, fds);
                     continue;
                 }
 
@@ -320,9 +330,9 @@ run_proxy()
             {   
                 if (read_data_back_to_front(curr_channel) == -1)
                 {
-                    log_write(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    log_write(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
-                    // fds_len = delete_channel(curr_channel, fds, fds_len);
+                    delete_channel(curr_channel, fds);
                     continue;
                 }
             }
@@ -334,9 +344,9 @@ run_proxy()
             {
                 if (write_data_back_to_front(curr_channel) == -1)
                 {
-                    log_write(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    log_write(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
-                    // fds_len = delete_channel(curr_channel, fds, fds_len);
+                    delete_channel(curr_channel, fds);
                     continue; 
                 }
             }
@@ -344,7 +354,7 @@ run_proxy()
     }
 
     finalyze:
-    log_write(LOG_INFO, "closing all fds...");
+    log_write(INFO, "closing all fds...");
     for (int i = 1; i < fds_len; i++) {
         if (fds[i].fd != -1) {
             close(fds[i].fd);
@@ -354,7 +364,7 @@ run_proxy()
     close(proxy_socket);
     list_free(channels);
 
-    log_write(LOG_INFO, "proxy server is shutting down...");
+    log_write(INFO, "proxy server is shutting down...");
 
     log_close();
 }
