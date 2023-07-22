@@ -14,7 +14,6 @@
 #include "proxy_log.h"
 // #include "proxy_manager.h"
 
-#define BUFFER_SIZE 1024
 #define MAX_CHANNELS 10
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
@@ -22,17 +21,8 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-typedef struct channel {
-    struct pollfd *front_fd;                           /* client */
-    struct pollfd *back_fd;                            /* postgres */
-    char front_to_back[BUFFER_SIZE];
-    char back_to_front[BUFFER_SIZE];
-    int bytes_received_from_front;
-    int bytes_received_from_back;
-} channel;
-
 static int
-read_data_front_to_back(channel *curr_channel)
+read_data_front_to_back(Channel *curr_channel)
 {
     curr_channel->bytes_received_from_front = read(curr_channel->front_fd->fd, curr_channel->front_to_back, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_front == -1)
@@ -50,7 +40,7 @@ read_data_front_to_back(channel *curr_channel)
 }
 
 static int
-read_data_back_to_front(channel *curr_channel)
+read_data_back_to_front(Channel *curr_channel)
 {
     curr_channel->bytes_received_from_back = read(curr_channel->back_fd->fd, curr_channel->back_to_front, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_back == -1)
@@ -68,7 +58,7 @@ read_data_back_to_front(channel *curr_channel)
 }
 
 static int
-write_data_front_to_back(channel * curr_channel)
+write_data_front_to_back(Channel * curr_channel)
 {
     int bytes_written = 0;
     if (curr_channel->bytes_received_from_front > 0) 
@@ -88,7 +78,7 @@ write_data_front_to_back(channel * curr_channel)
 }
 
 static int
-write_data_back_to_front(channel * curr_channel)
+write_data_back_to_front(Channel * curr_channel)
 {
     int bytes_written = 0;
     if (curr_channel->bytes_received_from_back > 0)
@@ -158,7 +148,7 @@ accept_connection(int proxy_socket)
 static List *
 create_channel(List *channels, struct pollfd *fds, int fds_len, int postgres_socket, int client_socket)
 {
-    channel *new_channel = (channel *)calloc(1, sizeof(channel));
+    Channel *new_channel = (Channel *)calloc(1, sizeof(Channel));
 
     bool postgres_fd_inserted = false;
     bool client_fd_inserted = false;
@@ -201,7 +191,7 @@ create_channel(List *channels, struct pollfd *fds, int fds_len, int postgres_soc
 }
 
 static void
-delete_channel(channel *curr_channel, struct pollfd *fds)
+delete_channel(Channel *curr_channel, struct pollfd *fds)
 {
     close(curr_channel->front_fd->fd);
     close(curr_channel->back_fd->fd);
@@ -295,7 +285,7 @@ run_proxy()
 
         foreach(cell, channels)
         {
-            channel *curr_channel = lfirst(cell); /* Macros to access the data values within List cells. */
+            Channel *curr_channel = lfirst(cell); /* Macros to access the data values within List cells. */
             struct pollfd *curr_fd = curr_channel->front_fd;
 
             /* if front is ready to send data then read data to buffer */
