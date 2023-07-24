@@ -1,4 +1,0 @@
-comment = 'proxy settings manager'
-default_version = '1.0'
-module_pathname = '$libdir/proxy'
-relocatable = true

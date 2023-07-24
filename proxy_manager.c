@@ -1,3 +1,7 @@
+/*
+ * contrib/proxy/proxy_manager.c
+ */
+
 #include "postgres.h"
 
 /* These are always necessary for a bgworker */
@@ -16,6 +20,10 @@
 
 #include "proxy_manager.h"
 
+PG_FUNCTION_INFO_V1(set_speed);
+
+ProxySettings proxy_settings;
+
 void init_proxy_settings(ProxySettings *proxy_settings) {
     bool found;
     proxy_settings = (ProxySettings*)ShmemInitStruct("proxy_settings", 
@@ -25,13 +33,6 @@ void init_proxy_settings(ProxySettings *proxy_settings) {
         LWLockInitialize(&proxy_settings->lock, 1);
     } 
 }
-
-
-ProxySettings proxy_settings;
-
-PG_MODULE_MAGIC;
-
-PG_FUNCTION_INFO_V1(start_test_manager);
 
 Datum
 set_speed(PG_FUNCTION_ARGS)
