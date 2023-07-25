@@ -7,17 +7,26 @@
 #include <unistd.h>
 #include <poll.h>
 
+#include "postgres.h"
+#include "fmgr.h"
 #include "c.h"
+#include "postmaster/postmaster.h"
+#include "utils/guc.h"
 #include "nodes/pg_list.h"
 
 #include "proxy.h"
 #include "proxy_log.h"
-#include "proxy_manager.h"
+// #include "proxy_manager.h"
 
-#define MAX_CHANNELS 10
-#define LOCALHOST_ADDR "127.0.0.1"
-#define DEFAULT_POSTGRES_PORT 5432
-#define POSTGRES_CURR_PORT 55432
+#define POSTGRES_ADDR ListenAddresses
+#define POSTGRES_CURR_PORT PostPortNumber
+// #define PROXY_ADDR "localhost"
+// #define PROXY_PORT 5432
+// #define MAX_CHANNELS 10
+
+static char *PROXY_ADDR;
+static int PROXY_PORT;
+static int MAX_CHANNELS;
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -58,7 +67,7 @@ read_data_back_to_front(Channel *curr_channel)
 }
 
 static int
-write_data_front_to_back(Channel * curr_channel)
+write_data_front_to_back(Channel *curr_channel)
 {
     int bytes_written = 0;
     if (curr_channel->bytes_received_from_front > 0) 
@@ -78,7 +87,7 @@ write_data_front_to_back(Channel * curr_channel)
 }
 
 static int
-write_data_back_to_front(Channel * curr_channel)
+write_data_back_to_front(Channel *curr_channel)
 {
     int bytes_written = 0;
     if (curr_channel->bytes_received_from_back > 0)
@@ -109,8 +118,8 @@ connect_postgres_server()
 
     struct sockaddr_in postgres_server;
     postgres_server.sin_family = AF_INET;
+    postgres_server.sin_addr.s_addr = inet_addr(POSTGRES_ADDR);
     postgres_server.sin_port = htons(POSTGRES_CURR_PORT);
-    postgres_server.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
@@ -130,7 +139,7 @@ accept_connection(int proxy_socket)
     socklen_t client_len;
     client_address.sin_family = AF_INET;
     client_address.sin_port = htons(POSTGRES_CURR_PORT);
-    client_address.sin_addr.s_addr = inet_addr(LOCALHOST_ADDR);
+    client_address.sin_addr.s_addr = inet_addr(POSTGRES_ADDR);
     client_len = sizeof(client_address);
 
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
@@ -208,14 +217,53 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
 
     /* background worker exited with exit code 1  ---  restart proxy in that way */
     /* signal handler check for interrupts and for exit */
-    /* look flags socket (all socket errors) */
-    /* get rid of goto's */
     /* check pg_indent */
+
+static void
+set_conf_vars()
+{
+    ConfigVariable *list_of_vars = NULL;
+    FILE *config = fopen("proxy.conf", "r");
+    if (config == NULL)
+    {
+        //error
+        return -1;
+    }
+    if (ParseConfigFp(config, "proxy.conf", 0, 0, &list_of_vars, NULL) == false)
+    {
+        // error
+        return -1;
+    }
+
+    ConfigVariable *curr_var = list_of_vars;
+    while (curr_var != NULL)
+    {
+        if (strcmp(curr_var->name, "proxy_addr") == 0)
+        {
+            PROXY_ADDR = calloc(16, sizeof(char));
+            strcpy(PROXY_ADDR, curr_var->value);
+        }
+        if (strcmp(curr_var->name, "proxy_port") == 0)
+        {
+            PROXY_PORT = atoi(curr_var->value);
+        }
+        if (strcmp(curr_var->name, "max_channels") == 0)
+        {
+            MAX_CHANNELS = atoi(curr_var->value);
+        }
+    }
+
+    FreeConfigVariables(list_of_vars);
+}
 
 void 
 run_proxy()
 {
+
+    // printf("\n\nlisten address %s and postgres curr port %d\n\n", POSTGRES_ADDR, POSTGRES_CURR_PORT);
+
     log_open();  
+    set_conf_vars();
 
     int proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (proxy_socket == -1)
@@ -224,13 +272,26 @@ run_proxy()
         exit(1);
     }
 
+    /* we will still try to bind to occupied address and port, but only if there is no listening socket binding to the address */
+    int opt;
+    if (setsockopt(proxy_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
+        log_write(LOG_ERROR, "can not set options for proxy socket");
+        close(proxy_socket);
+        exit(1);
+    }
+
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = htons(INADDR_ANY);
-    server_address.sin_port = htons(DEFAULT_POSTGRES_PORT);
+    server_address.sin_addr.s_addr = inet_addr(PROXY_ADDR);
+    server_address.sin_port = htons(PROXY_PORT);
 
     if (bind(proxy_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
+        if (errno == EADDRINUSE)
+        {
+            log_write(LOG_ERROR, "port for proxy is already in use, try another or kill the process using this port");
+        }
         log_write(LOG_ERROR, "error while binding proxy socket");
         close(proxy_socket);
         exit(1);
@@ -250,8 +311,8 @@ run_proxy()
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
     
-    struct pollfd fds[MAX_CHANNELS * 2 + 1]; /* 'cause we have 2 fds in one channel + 1 for proxy socket */
     size_t fds_len = MAX_CHANNELS * 2 + 1; /* max free idx of array of fds */
+    struct pollfd *fds = malloc(fds_len * sizeof(struct pollfd)); /* 'cause we have 2 fds in one channel + 1 for proxy socket */
     memset(fds, -1, sizeof(fds));
     fds[0].fd = proxy_socket;
     fds[0].events = POLLIN;
@@ -348,6 +409,9 @@ run_proxy()
             close(fds[i].fd);
         }
     }
+
+    free(fds);
+    free(PROXY_ADDR);
 
     close(proxy_socket);
     list_free(channels);

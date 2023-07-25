@@ -19,9 +19,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # until the server has started, you could use "pg_ctl start" here.)
 DAEMON="$prefix/bin/postmaster"
 
+# What address to use for postgres
+POSTGRES_ADDR="localhost"
+# What port to use for postgres
 POSTGRES_PORT="55432"
 
-FLAGS="-p $POSTGRES_PORT -c shared_preload_libraries=proxy"
+FLAGS="--host $POSTGRES_ADDR --port $POSTGRES_PORT -c shared_preload_libraries=proxy"
 
 # What to use to shut down the postmaster
 PGCTL="$prefix/bin/pg_ctl"
