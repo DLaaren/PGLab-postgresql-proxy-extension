@@ -1,0 +1,74 @@
+#! /bin/sh
+
+# Installation prefix
+prefix=/usr/local/pgsql
+
+# Data directory
+PGDATA="/usr/local/pgsql/data"
+
+# Who to run the postmaster as, usually "postgres".  (NOT "root")
+PGUSER=postgres
+
+# Where to keep a log file
+PGLOG="$PGDATA/logfile"
+
+# The path that is to be used for the script
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# What to use to start up the postmaster.  (If you want the script to wait
+# until the server has started, you could use "pg_ctl start" here.)
+DAEMON="$prefix/bin/postmaster"
+
+POSTGRES_PORT="55432"
+
+FLAGS="-p $POSTGRES_PORT -c shared_preload_libraries=proxy"
+
+# What to use to shut down the postmaster
+PGCTL="$prefix/bin/pg_ctl"
+
+set -e
+
+# Only start if we can find the postmaster.
+test -x $DAEMON ||
+{
+	echo "$DAEMON not found"
+	if [ "$1" = "stop" ]
+	then exit 0
+	else exit 5
+	fi
+}
+
+# Parse command line parameters.
+case $1 in
+  start)
+	echo -n "Starting PostgreSQL: "
+	su - $PGUSER -c "$DAEMON -D '$PGDATA' $FLAGS >>$PGLOG 2>&1 &"
+	echo "ok"
+	;;
+  stop)
+	echo -n "Stopping PostgreSQL: "
+	su - $PGUSER -c "$PGCTL stop -D '$PGDATA' -s"
+	echo "ok"
+	;;
+  restart)
+	echo -n "Restarting PostgreSQL: "
+	su - $PGUSER -c "$PGCTL stop -D '$PGDATA' -s"
+	su - $PGUSER -c "$DAEMON -D '$PGDATA' $FLAGS >>$PGLOG 2>&1 &"
+	echo "ok"
+	;;
+  reload)
+	echo -n "Reload PostgreSQL: "
+	su - $PGUSER -c "$PGCTL reload -D '$PGDATA' -s"
+	echo "ok"
+	;;
+  status)
+	su - $PGUSER -c "$PGCTL status -D '$PGDATA'"
+	;;
+  *)
+	# Print help
+	echo "Usage: $0 {start|stop|restart|reload|status}" 1>&2
+	exit 1
+	;;
+esac
+
+exit 0

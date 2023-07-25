@@ -1,7 +1,3 @@
-/*
- * contrib/proxy/proxy.h
- */
-
 #ifndef PROXY_H
 #define PROXY_H
 

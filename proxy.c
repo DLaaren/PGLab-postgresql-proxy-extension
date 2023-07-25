@@ -1,7 +1,3 @@
-/*
- * contrib/proxy/proxy.c
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,12 +12,12 @@
 
 #include "proxy.h"
 #include "proxy_log.h"
-// #include "proxy_manager.h"
+#include "proxy_manager.h"
 
 #define MAX_CHANNELS 10
 #define LOCALHOST_ADDR "127.0.0.1"
 #define DEFAULT_POSTGRES_PORT 5432
-#define POSTGRES_CURR_PORT 55432 /* LATER : (optional) think how to get this port number instead of typing it */
+#define POSTGRES_CURR_PORT 55432
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -210,12 +206,11 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
     // printf("\n\n");
 }
 
-    /* listen different ports */
-
-    /* SIGINT SIGEXIT and postgres' signals handler */
-    /* add function to on/off logs */
     /* background worker exited with exit code 1  ---  restart proxy in that way */
-    /* problems with deleting channels --- выявила пока тестировала pgbench'ом */
+    /* signal handler check for interrupts and for exit */
+    /* look flags socket (all socket errors) */
+    /* get rid of goto's */
+    /* check pg_indent */
 
 void 
 run_proxy()
@@ -267,7 +262,7 @@ run_proxy()
         if (err == -1)
         {
             log_write(LOG_ERROR, "error during poll()");
-            goto finalyze;
+            break;
         }
 
         /* if proxy socket is ready to accept connection then accept it and create channel */
@@ -276,12 +271,12 @@ run_proxy()
             client_socket = accept_connection(proxy_socket);
             if (client_socket == -1)
             {
-                goto finalyze;
+                break;
             }
             postgres_socket = connect_postgres_server();
             if (postgres_socket == -1)
             {
-                goto finalyze;
+                break;
             }
             channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
             log_write(LOG_INFO, "new channel has been created");
@@ -347,7 +342,6 @@ run_proxy()
         }
     }
 
-    finalyze:
     log_write(LOG_INFO, "closing all fds...");
     for (int i = 1; i < fds_len; i++) {
         if (fds[i].fd != -1) {

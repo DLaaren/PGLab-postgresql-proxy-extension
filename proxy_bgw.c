@@ -1,8 +1,4 @@
 /*
- * contrib/proxy/proxy_bgw.c
- */
-
-/*
  *  module description 
  *
  *  change default postgres_server port in configure file named "postgresql.conf" 
@@ -37,10 +33,10 @@ proxy_main(Datum main_arg)
 void 
 _PG_init(void)
 {
-    BackgroundWorker proxy_bgw;
-    
     /* LATER :: somethimes bgw exits with 1 exit code in the beginning */
     elog(LOG, "Proxy server has began working");
+
+    BackgroundWorker proxy_bgw;
 
     memset(&proxy_bgw, 0, sizeof(proxy_bgw));
     proxy_bgw.bgw_flags = BGWORKER_SHMEM_ACCESS;
