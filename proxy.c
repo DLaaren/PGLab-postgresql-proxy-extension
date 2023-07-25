@@ -260,9 +260,7 @@ void
 run_proxy()
 {
 
-    // printf("\n\nlisten address %s and postgres curr port %d\n\n", POSTGRES_ADDR, POSTGRES_CURR_PORT);
-
-    log_open();  
+    // printf("\n\nlisten address %s and postgres curr port %d\n\n", POSTGRES_ADDR, POSTGRES_CURR_PORT); 
     set_conf_vars();
 
     int proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -418,5 +416,4 @@ run_proxy()
 
     elog(LOG_INFO, "proxy server is shutting down...");
 
-    log_close();
 }
