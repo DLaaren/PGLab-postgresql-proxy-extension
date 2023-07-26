@@ -10,13 +10,16 @@
 
 #include "postgres.h"
 #include "fmgr.h"
+#include "miscadmin.h"
 #include "postmaster/bgworker.h"
+#include "utils/guc.h"
 
 #include "proxy.h"
 
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
+void _PG_fini(void);
 
 PGDLLEXPORT void proxy_main(Datum main_arg);
 
@@ -34,13 +37,71 @@ proxy_main(Datum main_arg)
     run_proxy();
 }
 
+static char *proxy_addr;
+static int proxy_port;
+static int max_channels;
+
 void 
 _PG_init(void)
 {
+    if (IsUnderPostmaster)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("proxy must be loaded via shared_preload_libraries")));
+    
+    proxy_addr = calloc(16, sizeof(char));
+
+    /*
+     *
+     */
+    DefineCustomStringVariable("proxy.proxy_addr", 
+                               "", 
+                               NULL, 
+                               &proxy_addr, 
+                               "localhost", 
+                               PGC_POSTMASTER, 
+                               GUC_NOT_IN_SAMPLE, 
+                               NULL, 
+                               NULL, 
+                               NULL);
+
+    /* 
+     *
+     */
+    DefineCustomIntVariable("proxy.proxy_port",
+                            "",
+                            NULL,
+                            &proxy_port,
+                            5432,
+                            0,
+                            65353,
+                            PGC_POSTMASTER,
+                            GUC_NOT_IN_SAMPLE,
+                            NULL,
+                            NULL,
+                            NULL);
+
+    /*
+     *
+     */
+    DefineCustomIntVariable("proxy.max_channels", 
+                            "", 
+                            NULL, 
+                            &max_channels, 
+                            15, 
+                            0, 
+                            100000, 
+                            PGC_POSTMASTER, 
+                            GUC_NOT_IN_SAMPLE, 
+                            NULL, 
+                            NULL, 
+                            NULL);
+
+    MarkGUCPrefixReserved("proxy");
+
     BackgroundWorker proxy_bgw;
     
-    /* LATER :: somethimes bgw exits with 1 exit code in the beginning */
-    elog(LOG, "Proxy server has began working");
+    elog(LOG, "Proxy server bgw has been registered");
 
     memset(&proxy_bgw, 0, sizeof(proxy_bgw));
     proxy_bgw.bgw_flags = BGWORKER_SHMEM_ACCESS;
@@ -52,4 +113,10 @@ _PG_init(void)
     sprintf(proxy_bgw.bgw_type, "proxy_server");
 
     RegisterBackgroundWorker(&proxy_bgw);
+}
+
+void
+_PG_fini()
+{
+    free(proxy_addr);
 }

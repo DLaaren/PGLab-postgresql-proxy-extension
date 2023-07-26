@@ -28,9 +28,9 @@
 // #define PROXY_PORT 5432
 // #define MAX_CHANNELS 10
 
-static char *PROXY_ADDR;
-static int PROXY_PORT;
-static int MAX_CHANNELS;
+static char *proxy_addr;
+static int proxy_port;
+static int max_channels;
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -40,15 +40,15 @@ read_data_front_to_back(Channel *curr_channel)
     curr_channel->bytes_received_from_front = read(curr_channel->front_fd->fd, curr_channel->front_to_back, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_front == -1)
     {
-        elog(LOG_ERROR, "error while reading from front (fd %d) to back", curr_channel->front_fd->fd);
+        elog(ERROR, "error while reading from front (fd %d) to back", curr_channel->front_fd->fd);
         return -1;
     }
     if (curr_channel->bytes_received_from_front == 0)
     {
-        elog(LOG_INFO, "connection has been lost");
+        elog(INFO, "connection has been lost");
         return -1;
     }
-    elog(LOG_INFO, "read from front (fd %d) to back %d bytes", curr_channel->front_fd->fd, curr_channel->bytes_received_from_front);
+    elog(INFO, "read from front (fd %d) to back %d bytes", curr_channel->front_fd->fd, curr_channel->bytes_received_from_front);
     return 0;
 }
 
@@ -58,15 +58,15 @@ read_data_back_to_front(Channel *curr_channel)
     curr_channel->bytes_received_from_back = read(curr_channel->back_fd->fd, curr_channel->back_to_front, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_back == -1)
     {
-        elog(LOG_ERROR, "error while reading from back (fd %d) to front", curr_channel->back_fd->fd);
+        elog(ERROR, "error while reading from back (fd %d) to front", curr_channel->back_fd->fd);
         return -1;
     }
     if (curr_channel->bytes_received_from_back == 0)
     {
-        elog(LOG_INFO, "connection has been lost");
+        elog(INFO, "connection has been lost");
         return -1;
     } 
-    elog(LOG_INFO, "read from back (fd %d) to front %d bytes", curr_channel->back_fd->fd, curr_channel->bytes_received_from_back);
+    elog(INFO, "read from back (fd %d) to front %d bytes", curr_channel->back_fd->fd, curr_channel->bytes_received_from_back);
     return 0;
 }
 
@@ -77,14 +77,14 @@ write_data_front_to_back(Channel *curr_channel)
     if (curr_channel->bytes_received_from_front > 0) 
     {
         bytes_written = write(curr_channel->back_fd->fd, curr_channel->front_to_back, curr_channel->bytes_received_from_front);
-        elog(LOG_INFO, "write to back (fd %d) %d bytes", curr_channel->back_fd->fd, bytes_written);
+        elog(INFO, "write to back (fd %d) %d bytes", curr_channel->back_fd->fd, bytes_written);
 
         memset(curr_channel->front_to_back, 0, BUFFER_SIZE);
         curr_channel->bytes_received_from_front = 0;
     }
     if (bytes_written == -1)
     {
-        elog(LOG_ERROR, "error while writing from front to back (fd %d)", curr_channel->back_fd->fd);
+        elog(ERROR, "error while writing from front to back (fd %d)", curr_channel->back_fd->fd);
         return -1;
     }
     return 0;
@@ -97,14 +97,14 @@ write_data_back_to_front(Channel *curr_channel)
     if (curr_channel->bytes_received_from_back > 0)
     {
         bytes_written = write(curr_channel->front_fd->fd, curr_channel->back_to_front, curr_channel->bytes_received_from_back);
-        elog(LOG_INFO, "write to front (fd %d) %d bytes", curr_channel->front_fd->fd, bytes_written);
+        elog(INFO, "write to front (fd %d) %d bytes", curr_channel->front_fd->fd, bytes_written);
 
         memset(curr_channel->back_to_front, 0, BUFFER_SIZE);
         curr_channel->bytes_received_from_back = 0;
     }
     if (bytes_written == -1)
     {
-        elog(LOG_ERROR, "error while writing from back to front (fd %d)", curr_channel->front_fd->fd);
+        elog(ERROR, "error while writing from back to front (fd %d)", curr_channel->front_fd->fd);
         return -1;
     }
     return 0;
@@ -116,7 +116,7 @@ connect_postgres_server()
     int postgres_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (postgres_socket == -1)
     {
-        elog(LOG_ERROR, "error while creating postgres socket");
+        elog(ERROR, "error while creating postgres socket");
         return -1;
     }
 
@@ -127,11 +127,11 @@ connect_postgres_server()
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
-        elog(LOG_ERROR, "error while binding postgres socket");
+        elog(ERROR, "error while binding postgres socket");
         return -1;
     }
 
-    elog(LOG_INFO, "proxy has connected to postgres server successfully (fd %d)", postgres_socket);
+    elog(INFO, "proxy has connected to postgres server successfully (fd %d)", postgres_socket);
     return postgres_socket;
 }
 
@@ -149,11 +149,11 @@ accept_connection(int proxy_socket)
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
-        elog(LOG_ERROR, "error while accepting a connection from front");
+        elog(ERROR, "error while accepting a connection from front");
         return -1;
     }
 
-    elog(LOG_INFO, "new connection from client: %s:%d (fd %d)",
+    elog(INFO, "new connection from client: %s:%d (fd %d)",
                            inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), client_socket);
     return client_socket;
 }
@@ -194,7 +194,7 @@ create_channel(List *channels, struct pollfd *fds, int fds_len, int postgres_soc
     }
     channels = lappend(channels, new_channel);
 
-    // for (size_t idx = 0; idx < MAX_CHANNELS*2 + 1; idx++)
+    // for (size_t idx = 0; idx < max_channels*2 + 1; idx++)
     // {
     //     printf("%d ", fds[idx].fd);
     // }
@@ -212,7 +212,7 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
     curr_channel->front_fd->fd = -1;
     curr_channel->back_fd->fd = -1;
 
-    // for (size_t idx = 0; idx < MAX_CHANNELS*2 + 1; idx++)
+    // for (size_t idx = 0; idx < max_channels*2 + 1; idx++)
     // {
     //     printf("%d ", fds[idx].fd);
     // }
@@ -223,54 +223,35 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
     /* signal handler check for interrupts and for exit */
     /* check pg_indent */
 
-static void
-set_conf_vars()
+static void 
+get_conf_vars()
 {
-    ConfigVariable *list_of_vars = NULL;
-    FILE *config = fopen("proxy.conf", "r");
-    if (config == NULL)
-    {
-        //error
-        return -1;
-    }
-    if (ParseConfigFp(config, "proxy.conf", 0, 0, &list_of_vars, NULL) == false)
-    {
-        // error
-        return -1;
-    }
+    proxy_addr = GetConfigOption("proxy.proxy_addr", true, false);
+ 
+    parse_int(GetConfigOption("proxy.proxy_port", true, false),
+              &proxy_port,
+              0,
+              NULL);
 
-    ConfigVariable *curr_var = list_of_vars;
-    while (curr_var != NULL)
-    {
-        if (strcmp(curr_var->name, "proxy_addr") == 0)
-        {
-            PROXY_ADDR = calloc(16, sizeof(char));
-            strcpy(PROXY_ADDR, curr_var->value);
-        }
-        if (strcmp(curr_var->name, "proxy_port") == 0)
-        {
-            PROXY_PORT = atoi(curr_var->value);
-        }
-        if (strcmp(curr_var->name, "max_channels") == 0)
-        {
-            MAX_CHANNELS = atoi(curr_var->value);
-        }
-    }
+    parse_int(GetConfigOption("proxy.max_channels", true, false),
+              &max_channels,
+              0,
+              NULL);
 
-    FreeConfigVariables(list_of_vars);
+    // printf("%s\n", proxy_addr);
+    // printf("%d\n", proxy_port);
+    // printf("%d\n", max_channels);
 }
 
 void 
 run_proxy()
-{
-
-    // printf("\n\nlisten address %s and postgres curr port %d\n\n", POSTGRES_ADDR, POSTGRES_CURR_PORT); 
-    set_conf_vars();
+{ 
+    get_conf_vars();
 
     int proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (proxy_socket == -1)
     {
-        elog(LOG_ERROR, "error while creating proxy socket");
+        elog(ERROR, "error while creating proxy socket");
         exit(1);
     }
 
@@ -278,44 +259,44 @@ run_proxy()
     int opt;
     if (setsockopt(proxy_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
-        elog(LOG_ERROR, "can not set options for proxy socket");
+        elog(ERROR, "can not set options for proxy socket");
         close(proxy_socket);
         exit(1);
     }
 
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(PROXY_ADDR);
-    server_address.sin_port = htons(PROXY_PORT);
+    server_address.sin_addr.s_addr = inet_addr(proxy_addr);
+    server_address.sin_port = htons(proxy_port);
 
     if (bind(proxy_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
         if (errno == EADDRINUSE)
         {
-            elog(LOG_ERROR, "port for proxy is already in use, try another or kill the process using this port");
+            elog(ERROR, "port for proxy is already in use, try another or kill the process using this port");
         }
-        elog(LOG_ERROR, "error while binding proxy socket");
+        elog(ERROR, "error while binding proxy socket");
         close(proxy_socket);
         exit(1);
     }
 
-    if (listen(proxy_socket, MAX_CHANNELS) == -1)
+    if (listen(proxy_socket, max_channels) == -1)
     {
-        elog(LOG_ERROR, "error while listening from proxy socket");
+        elog(ERROR, "error while listening from proxy socket");
         close(proxy_socket);
         exit(1);
     }
 
-    elog(LOG_INFO, "proxy server is running and waiting for connections...");
+    elog(INFO, "proxy server is running and waiting for connections...");
 
 
     List *channels = NIL;
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
     
-    size_t fds_len = MAX_CHANNELS * 2 + 1; /* max free idx of array of fds */
+    size_t fds_len = max_channels * 2 + 1; /* max free idx of array of fds */
     struct pollfd *fds = malloc(fds_len * sizeof(struct pollfd)); /* 'cause we have 2 fds in one channel + 1 for proxy socket */
-    memset(fds, -1, sizeof(fds));
+    memset(fds, -1, sizeof(struct pollfd) * fds_len);
     fds[0].fd = proxy_socket;
     fds[0].events = POLLIN;
 
@@ -324,7 +305,7 @@ run_proxy()
         int err = poll(fds, fds_len, -1);
         if (err == -1)
         {
-            elog(LOG_ERROR, "error during poll()");
+            elog(ERROR, "error during poll()");
             break;
         }
 
@@ -342,7 +323,7 @@ run_proxy()
                 break;
             }
             channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
-            elog(LOG_INFO, "new channel has been created");
+            elog(INFO, "new channel has been created");
         }
 
         foreach(cell, channels)
@@ -355,7 +336,7 @@ run_proxy()
             {   
                 if (read_data_front_to_back(curr_channel) == -1)
                 {
-                    elog(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    elog(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
                     delete_channel(curr_channel, fds);
                     continue;
@@ -369,7 +350,7 @@ run_proxy()
             {
                 if (write_data_front_to_back(curr_channel) == -1)
                 {
-                    elog(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    elog(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
                     delete_channel(curr_channel, fds);
                     continue;
@@ -382,7 +363,7 @@ run_proxy()
             {   
                 if (read_data_back_to_front(curr_channel) == -1)
                 {
-                    elog(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    elog(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
                     delete_channel(curr_channel, fds);
                     continue;
@@ -396,7 +377,7 @@ run_proxy()
             {
                 if (write_data_back_to_front(curr_channel) == -1)
                 {
-                    elog(LOG_INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
+                    elog(INFO, "channel has been deleted (fds %d and %d)", curr_channel->front_fd->fd, curr_channel->back_fd->fd);
                     channels = foreach_delete_current(channels, cell);
                     delete_channel(curr_channel, fds);
                     continue; 
@@ -405,7 +386,7 @@ run_proxy()
         }
     }
 
-    elog(LOG_INFO, "closing all fds...");
+    elog(INFO, "closing all fds...");
     for (int i = 1; i < fds_len; i++) {
         if (fds[i].fd != -1) {
             close(fds[i].fd);
@@ -413,11 +394,10 @@ run_proxy()
     }
 
     free(fds);
-    free(PROXY_ADDR);
 
     close(proxy_socket);
     list_free(channels);
 
-    elog(LOG_INFO, "proxy server is shutting down...");
+    elog(INFO, "proxy server is shutting down...");
 
 }

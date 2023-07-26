@@ -4,7 +4,7 @@
 prefix=/usr/local/pgsql
 
 # Data directory
-PGDATA="/usr/local/pgsql/data"
+PGDATA="/var/lib/postgres/data"
 
 # Who to run the postmaster as, usually "postgres".  (NOT "root")
 PGUSER=postgres
@@ -24,7 +24,14 @@ POSTGRES_ADDR="localhost"
 # What port to use for postgres
 POSTGRES_PORT="55432"
 
-FLAGS="--host $POSTGRES_ADDR --port $POSTGRES_PORT -c shared_preload_libraries=proxy"
+# What address to use for proxy
+PROXY_ADDR="localhost"
+# What port to use for postgres
+PROXY_PORT=5432
+# Max number of connections
+MAX_CHANNELS=10
+
+FLAGS="-h $POSTGRES_ADDR -p $POSTGRES_PORT -c shared_preload_libraries=proxy -c proxy_addr=$PROXY_ADDR -c proxy_port=$PROXY_PORT -c max_channels=$MAX_CHANNELS"
 
 # What to use to shut down the postmaster
 PGCTL="$prefix/bin/pg_ctl"
