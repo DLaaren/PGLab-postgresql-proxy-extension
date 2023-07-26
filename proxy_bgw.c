@@ -54,11 +54,11 @@ _PG_init(void)
     /*
      *
      */
-    DefineCustomStringVariable("proxy.proxy_addr", 
+    DefineCustomStringVariable("proxy.listening_address", 
                                "", 
                                NULL, 
                                &proxy_addr, 
-                               "localhost", 
+                               "127.0.0.1", 
                                PGC_POSTMASTER, 
                                GUC_NOT_IN_SAMPLE, 
                                NULL, 
@@ -68,7 +68,7 @@ _PG_init(void)
     /* 
      *
      */
-    DefineCustomIntVariable("proxy.proxy_port",
+    DefineCustomIntVariable("proxy.port",
                             "",
                             NULL,
                             &proxy_port,

@@ -20,18 +20,18 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON="$prefix/bin/postmaster"
 
 # What address to use for postgres
-POSTGRES_ADDR="localhost"
+POSTGRES_ADDR="127.0.0.1"
 # What port to use for postgres
 POSTGRES_PORT="55432"
 
 # What address to use for proxy
-PROXY_ADDR="localhost"
+PROXY_ADDR="127.0.0.1"
 # What port to use for postgres
-PROXY_PORT=5432
+PROXY_PORT="5432"
 # Max number of connections
-MAX_CHANNELS=10
+MAX_CHANNELS="10"
 
-FLAGS="-h $POSTGRES_ADDR -p $POSTGRES_PORT -c shared_preload_libraries=proxy -c proxy.proxy_addr=$PROXY_ADDR -c proxy.proxy_port=$PROXY_PORT -c proxy.max_channels=$MAX_CHANNELS"
+FLAGS="-h $POSTGRES_ADDR -p $POSTGRES_PORT -c shared_preload_libraries=proxy -c proxy.listening_address=$PROXY_ADDR -c proxy.port=$PROXY_PORT -c proxy.max_channels=$MAX_CHANNELS"
 
 # What to use to shut down the postmaster
 PGCTL="$prefix/bin/pg_ctl"

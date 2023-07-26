@@ -122,12 +122,12 @@ connect_postgres_server()
 
     struct sockaddr_in postgres_server;
     postgres_server.sin_family = AF_INET;
-    postgres_server.sin_addr.s_addr = inet_addr(POSTGRES_ADDR);
+    postgres_server.sin_addr.s_addr = htons(INADDR_ANY);
     postgres_server.sin_port = htons(POSTGRES_CURR_PORT);
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_server, sizeof(postgres_server)) == -1)
     {
-        elog(ERROR, "error while binding postgres socket");
+        elog(ERROR, "error while connecting postgres socket");
         return -1;
     }
 
@@ -142,8 +142,8 @@ accept_connection(int proxy_socket)
     struct sockaddr_in client_address;
     socklen_t client_len;
     client_address.sin_family = AF_INET;
-    client_address.sin_port = htons(POSTGRES_CURR_PORT);
-    client_address.sin_addr.s_addr = inet_addr(POSTGRES_ADDR);
+    client_address.sin_addr.s_addr = inet_addr(proxy_addr);
+    client_address.sin_port = htons(proxy_port);
     client_len = sizeof(client_address);
 
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
@@ -226,9 +226,9 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
 static void 
 get_conf_vars()
 {
-    proxy_addr = GetConfigOption("proxy.proxy_addr", true, false);
+    proxy_addr = GetConfigOption("proxy.listening_address", true, false);
  
-    parse_int(GetConfigOption("proxy.proxy_port", true, false),
+    parse_int(GetConfigOption("proxy.port", true, false),
               &proxy_port,
               0,
               NULL);
@@ -242,6 +242,13 @@ get_conf_vars()
     // printf("%d\n", proxy_port);
     // printf("%d\n", max_channels);
 }
+
+
+/*  
+        TODO:::
+        get rid of bad func --- inet_addr()
+        and fix "localhost"
+*/
 
 void 
 run_proxy()
@@ -264,12 +271,14 @@ run_proxy()
         exit(1);
     }
 
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(proxy_addr);
-    server_address.sin_port = htons(proxy_port);
+    struct sockaddr_in proxy_address;
+    proxy_address.sin_family = AF_INET;
+    proxy_address.sin_addr.s_addr = inet_addr(proxy_addr);
+    proxy_address.sin_port = htons(proxy_port);
 
-    if (bind(proxy_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
+    printf("\n\nlistening on %s port %d\n\n", proxy_addr, proxy_port);
+
+    if (bind(proxy_socket, (struct sockaddr *)&proxy_address, sizeof(proxy_address)) == -1)
     {
         if (errno == EADDRINUSE)
         {
@@ -288,7 +297,6 @@ run_proxy()
     }
 
     elog(INFO, "proxy server is running and waiting for connections...");
-
 
     List *channels = NIL;
     ListCell *cell = NULL;
