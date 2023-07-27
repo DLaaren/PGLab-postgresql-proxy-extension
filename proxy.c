@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <poll.h>
+#include <signal.h>
 
 #include "postgres.h"
 #include "fmgr.h"
@@ -35,7 +36,7 @@ read_data_front_to_back(Channel *curr_channel)
     curr_channel->bytes_received_from_front = read(curr_channel->front_fd->fd, curr_channel->front_to_back, BUFFER_SIZE);
     if (curr_channel->bytes_received_from_front == -1)
     {
-        elog(ERROR, "error while reading from front (fd %d) to back", curr_channel->front_fd->fd);
+        elog(ERROR, "error while reading from front (fd %d) to back : ", curr_channel->front_fd->fd);
         return -1;
     }
     if (curr_channel->bytes_received_from_front == 0)
@@ -126,7 +127,7 @@ connect_postgres_server()
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_address, sizeof(postgres_address)) == -1)
     {
-        elog(ERROR, "error while connecting postgres socket");
+        elog(ERROR, "error while connecting to postgres server");
         return -1;
     }
 
@@ -192,6 +193,7 @@ create_channel(List *channels, struct pollfd *fds, int fds_len, int postgres_soc
         return channels;
     }
     channels = lappend(channels, new_channel);
+    elog(INFO, "new channel has been created");
 
     return channels;
 }
@@ -204,9 +206,10 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
 
     curr_channel->front_fd->fd = -1;
     curr_channel->back_fd->fd = -1;
+    elog(INFO, "channel has been deleted");
 }
 
-    /* background worker exited with exit code 1  ---  restart proxy in that way */
+    /* TODO */
     /* signal handler check for interrupts and for exit */
     /* check pg_indent */
 
@@ -231,6 +234,22 @@ get_conf_vars()
         return -1;
     }
     return 0;
+}
+
+void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
+{
+    elog(INFO, "closing all fds...");
+
+    for (int i = 0; i < fds_len; i++) {
+        if (fds[i].fd != -1) {
+            close(fds[i].fd);
+        }
+    }
+
+    list_free(channels);
+
+    elog(INFO, "proxy server is shutting down...");
+    exit(2);
 }
 
 void 
@@ -295,7 +314,7 @@ run_proxy()
     
     size_t fds_len = max_channels * 2 + 1; /* max free idx of array of fds */
     struct pollfd *fds = malloc(fds_len * sizeof(struct pollfd)); /* 'cause we have 2 fds in one channel + 1 for proxy socket */
-    memset(fds, -1, sizeof(struct pollfd) * fds_len);
+    memset(fds, -1, fds_len * sizeof(struct pollfd));
     fds[0].fd = proxy_socket;
     fds[0].events = POLLIN;
 
@@ -322,7 +341,6 @@ run_proxy()
                 break;
             }
             channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
-            elog(INFO, "new channel has been created");
         }
 
         foreach(cell, channels)
@@ -385,18 +403,5 @@ run_proxy()
         }
     }
 
-    elog(INFO, "closing all fds...");
-    for (int i = 1; i < fds_len; i++) {
-        if (fds[i].fd != -1) {
-            close(fds[i].fd);
-        }
-    }
-
-    free(fds);
-
-    close(proxy_socket);
-    list_free(channels);
-
-    elog(INFO, "proxy server is shutting down...");
-
+    shutdown_proxy(fds, fds_len, channels);
 }

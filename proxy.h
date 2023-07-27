@@ -20,4 +20,7 @@ typedef struct Channel {
 extern void
 run_proxy();
 
+extern void
+shutdown_proxy();
+
 #endif /* PROXY_H */
