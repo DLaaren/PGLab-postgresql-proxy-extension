@@ -18,14 +18,19 @@
 
 #include "proxy_manager.h"
 
+#define SIZE 25
+
 PG_FUNCTION_INFO_V1(set_speed);
 
 ProxySettings proxy_settings;
 
+
 void 
 init_proxy_settings(ProxySettings *proxy_settings) {
     bool found;
-    proxy_settings = (ProxySettings*)ShmemInitStruct("proxy_settings", 
+    char shmem_name[SIZE] = { 0 };
+    sprintf(shmem_name, "proxy_settings_%d", MyProcPid);
+    proxy_settings = (ProxySettings*)ShmemInitStruct(shmem_name, 
                                                      sizeof(ProxySettings), 
                                                      &found);
     if (!found) {
