@@ -13,6 +13,7 @@ typedef struct {
     void (*pipe)(Channel *channel); /* main toxic function */
 } Toxic;
 
-extern void register_toxic(Toxic toxic);
+extern void register_toxic(char *name, Toxic toxic);
+extern void run(Channel *channel, Toxic toxic);
 
 #endif /* TOXIC_H */

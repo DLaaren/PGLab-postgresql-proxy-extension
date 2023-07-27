@@ -1,11 +1,12 @@
 #include "toxic.h"
 
-void register_toxic(Toxic toxic) {
+/*
+ * Register toxic in map (toxic name: toxic) TODO: need to map (from another lib or my own)
+ */
+void register_toxic(char *name, Toxic toxic) {
     // register toxic in some map
 }
 
-static void my_pipe(Channel *channel) {
-    // toxic behavior
+void run(Channel* channel, Toxic toxic) {
+    toxic.pipe(channel);
 }
-
-Toxic latencyToxic = { .pipe = my_pipe }; // example
