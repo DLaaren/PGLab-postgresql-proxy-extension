@@ -1,12 +1,11 @@
-/*
- * contrib/proxy/proxy_manager.h
- */
+/* contrib/proxy/proxy_manager.h */
 
 #ifndef PROXY_MANAGER_H
 #define PROXY_MANAGER_H
 
 #include "postgres.h"
 #include "storage/lwlock.h"
+
 /*
  * Proxy toxy setting struct.
  */

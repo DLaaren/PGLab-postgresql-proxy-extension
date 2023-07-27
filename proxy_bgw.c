@@ -1,12 +1,4 @@
-/*
- * contrib/proxy/proxy_bgw.c
- */
-
-/*
- *  module description 
- *
- *  change default postgres_server port in configure file named "postgresql.conf" 
- */
+/* contrib/proxy/proxy_bgw.c */
 
 #include "postgres.h"
 #include "fmgr.h"
@@ -26,14 +18,7 @@ PGDLLEXPORT void proxy_main(Datum main_arg);
 void
 proxy_main(Datum main_arg)
 {
-/*
- *  Unblocking signals from postgres processes
- */
     BackgroundWorkerUnblockSignals();
-
-/*
- *  Starting proxy server
- */
     run_proxy();
 }
 

@@ -1,6 +1,4 @@
-/*
- * contrib/proxy/proxy_log.h
- */
+/* contrib/proxy/proxy_log.h */
 
 #ifndef PROXY_LOG_H
 #define PROXY_LOG_H
@@ -12,12 +10,13 @@ typedef enum MessageType {
 } MessageType;
 
 /* 
- * Opening logfile.
+ * Opens logfile.
  */
 extern void
 log_open();
 
-/* Write message in logfile. 
+/* 
+ * Writes message in logfile. 
  * Opens logfile if it closed.
  * Args is the same as in "printf", "message" can be also as a format.
  * Sym "/n" is placed automatically.
@@ -26,7 +25,7 @@ extern void
 log_write(MessageType type, char* message, ...);
 
 /*
- * Close logfile. 
+ * Closes logfile. 
 */
 extern void
 log_close();

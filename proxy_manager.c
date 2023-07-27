@@ -1,6 +1,4 @@
-/*
- * contrib/proxy/proxy_manager.c
- */
+/* contrib/proxy/proxy_manager.c */
 
 #include "postgres.h"
 
@@ -28,8 +26,8 @@ void
 init_proxy_settings(ProxySettings *proxy_settings) {
     bool found;
     proxy_settings = (ProxySettings*)ShmemInitStruct("proxy_settings", 
-                                                    sizeof(ProxySettings), 
-                                                    &found);
+                                                     sizeof(ProxySettings), 
+                                                     &found);
     if (!found) {
         LWLockInitialize(&proxy_settings->lock, 1);
     } 
