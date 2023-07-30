@@ -6,6 +6,7 @@
 #include "postmaster/bgworker.h"
 #include "utils/guc.h"
 
+#include <stdlib.h>
 #include <signal.h>
 #include "proxy.h"
 
@@ -16,11 +17,31 @@ void _PG_fini(void);
 
 PGDLLEXPORT void proxy_main(Datum main_arg);
 
+
+static int max_nodes;
+static char **arr_listening_socket_addrs;
+static int *arr_listening_socket_ports;
+static char **arr_node_addrs;
+
+static void
+free_arrs()
+{
+    free(arr_listening_socket_ports);
+    for (int node_idx = 0; node_idx < max_nodes; node_idx++)
+    {
+        free(arr_listening_socket_addrs[node_idx]);
+        free(arr_node_addrs);
+    }
+    free(arr_listening_socket_addrs);
+    free(arr_node_addrs);
+}
+
 static void
 sigint_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGINT");
     shutdown_proxy();
+    free_arrs();
     exit(2);
 }
 
@@ -28,7 +49,8 @@ static void
 sigquit_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGQUIT");
-    shutdown_proxy();
+    // shutdown_proxy();
+    // free_arrs()
     exit(2);
 }
 
@@ -37,6 +59,7 @@ sigterm_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGTERM");
     shutdown_proxy();
+    free_arrs();
     exit(2);
 }
 
@@ -59,10 +82,6 @@ proxy_main(Datum main_arg)
     run_proxy();
 }
 
-static char *proxy_addr;
-static int proxy_port;
-static int max_channels;
-
 void 
 _PG_init(void)
 {
@@ -71,34 +90,50 @@ _PG_init(void)
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("proxy must be loaded via shared_preload_libraries")));
     
-    proxy_addr = calloc(16, sizeof(char));
-
-
-    DefineCustomStringVariable("proxy.listening_address", 
-                               "This variable defines the proxy listening socket IPv4 address ", 
-                               NULL, 
-                               &proxy_addr, 
-                               "127.0.0.1", 
-                               PGC_POSTMASTER, 
-                               GUC_NOT_IN_SAMPLE, 
-                               NULL, 
-                               NULL, 
-                               NULL);
-
-    DefineCustomIntVariable("proxy.port",
-                            "This variable defines the proxy listening socket port",
+    DefineCustomIntVariable("proxy.max_nodes",
+                            "Defines how many nodes can be connected to proxy",
                             NULL,
-                            &proxy_port,
-                            5432,
+                            &max_nodes,
+                            1,
                             0,
-                            65353,
+                            10000,
                             PGC_POSTMASTER,
-                            GUC_NOT_IN_SAMPLE,
+                            GUC_NOT_IN_SAMPLE, /* the value can not be changed after the server start */
                             NULL,
                             NULL,
-                            NULL);
+                            NULL
+                            );
+    arr_listening_socket_addrs = calloc(max_nodes, sizeof(char*));
+    arr_listening_socket_ports = calloc(max_nodes, sizeof(int));
+    arr_node_addrs = calloc(max_nodes, sizeof(char*));
+    for (int node_idx = 0; node_idx < max_nodes; node_idx++)
+    {
+        char node_name[20] = "proxy.node";
+        char node_idx_str[10];
+        parse_int(node_idx_str, &node_idx, 0, NULL); 
+        strcat(node_name, node_idx_str);
 
-    DefineCustomIntVariable("proxy.max_channels", 
+        char sock_addr_str[40] = {0};
+        strcpy(sock_addr_str, node_name);
+        strcat(sock_addr_str, "_listening_socket_addr");
+        char *socket_addr = calloc(16, sizeof(char));
+        arr_listening_socket_addrs[node_idx] = socket_addr;
+        DefineCustomStringVariable(sock_addr_str, NULL, NULL, &(arr_listening_socket_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+
+        char sock_port_str[40] = {0};
+        strcpy(sock_port_str, node_name);
+        strcat(sock_port_str, "_listening_socket_port");
+        DefineCustomIntVariable(sock_port_str, NULL, NULL, &(arr_listening_socket_ports[node_idx]), 15001, 0, 65535, PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+
+        char node_addr_str[40] = {0};
+        strcpy(node_addr_str, node_name);
+        strcat(node_addr_str, "_addr");
+        char *node_addr = calloc(16, sizeof(char));
+        arr_node_addrs[node_idx] = node_addr;
+        DefineCustomStringVariable(node_addr_str, NULL, NULL, &(arr_node_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+    }
+
+    /* DefineCustomIntVariable("proxy.max_channels", 
                             "This variable defines the maximum possible channels", 
                             NULL, 
                             &max_channels, 
@@ -109,9 +144,13 @@ _PG_init(void)
                             GUC_NOT_IN_SAMPLE, 
                             NULL, 
                             NULL, 
-                            NULL);
+                            NULL); */
 
     MarkGUCPrefixReserved("proxy");
+
+    /* shared memory declaration && allocation */
+
+    /* ... */
 
     BackgroundWorker proxy_bgw;
     memset(&proxy_bgw, 0, sizeof(proxy_bgw));
@@ -132,5 +171,6 @@ _PG_init(void)
 void
 _PG_fini()
 {
-    free(proxy_addr);
+    shutdown_proxy();
+    free_arrs();
 }

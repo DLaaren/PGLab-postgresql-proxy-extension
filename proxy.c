@@ -142,8 +142,8 @@ accept_connection(int proxy_socket)
     struct sockaddr_in client_address;
     socklen_t client_len;
     client_address.sin_family = AF_INET;
-    client_address.sin_addr.s_addr = htons(INADDR_ANY);
-    // client_address.sin_port = htons(proxy_port);
+    client_address.sin_addr.s_addr = htons(INADDR_ANY); 
+    // client_address.sin_port = htons(proxy_port); /* здеся будет определённый порт */
     client_len = sizeof(client_address);
 
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
@@ -209,10 +209,6 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
     elog(INFO, "channel has been deleted");
 }
 
-    /* TODO */
-    /* signal handler check for interrupts and for exit */
-    /* check pg_indent */
-
 static int 
 get_conf_vars()
 {
@@ -250,6 +246,13 @@ void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
 
     elog(INFO, "proxy server is shutting down...");
 }
+
+/* TODO */
+    /* add check for same addresses and ports of postgres and proxy */
+    /* check pg_indent */
+    /* tap tests */
+    /* several bgws -- try to start twi-three -- think how to differ them */
+
 
 void 
 run_proxy()
