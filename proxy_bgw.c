@@ -21,6 +21,7 @@ sigint_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGINT");
     shutdown_proxy();
+    exit(2);
 }
 
 static void
@@ -28,6 +29,7 @@ sigquit_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGQUIT");
     shutdown_proxy();
+    exit(2);
 }
 
 static void
@@ -35,6 +37,7 @@ sigterm_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGTERM");
     shutdown_proxy();
+    exit(2);
 }
 
 void

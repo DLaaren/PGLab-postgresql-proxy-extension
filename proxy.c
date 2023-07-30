@@ -249,7 +249,6 @@ void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
     list_free(channels);
 
     elog(INFO, "proxy server is shutting down...");
-    exit(2);
 }
 
 void 
