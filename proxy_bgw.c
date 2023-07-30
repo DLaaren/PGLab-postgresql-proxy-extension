@@ -17,12 +17,6 @@ void _PG_fini(void);
 
 PGDLLEXPORT void proxy_main(Datum main_arg);
 
-
-static int max_nodes;
-static char **arr_listening_socket_addrs;
-static int *arr_listening_socket_ports;
-static char **arr_node_addrs;
-
 static void
 free_arrs()
 {
@@ -41,7 +35,6 @@ sigint_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGINT");
     shutdown_proxy();
-    free_arrs();
     exit(2);
 }
 
@@ -50,7 +43,6 @@ sigquit_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGQUIT");
     // shutdown_proxy();
-    // free_arrs()
     exit(2);
 }
 
@@ -59,7 +51,6 @@ sigterm_handler(SIGNAL_ARGS)
 {
     elog(INFO, "proxy received SIGTERM");
     shutdown_proxy();
-    free_arrs();
     exit(2);
 }
 
@@ -106,28 +97,23 @@ _PG_init(void)
     arr_listening_socket_addrs = calloc(max_nodes, sizeof(char*));
     arr_listening_socket_ports = calloc(max_nodes, sizeof(int));
     arr_node_addrs = calloc(max_nodes, sizeof(char*));
-    for (int node_idx = 0; node_idx < max_nodes; node_idx++)
+    for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
-        char node_name[20] = "proxy.node";
-        char node_idx_str[10];
-        parse_int(node_idx_str, &node_idx, 0, NULL); 
-        strcat(node_name, node_idx_str);
+        char node_name[20] = {0};
+        sprintf(node_name, "proxy.node%d", node_idx); 
 
         char sock_addr_str[40] = {0};
-        strcpy(sock_addr_str, node_name);
-        strcat(sock_addr_str, "_listening_socket_addr");
+        sprintf(sock_addr_str, "%s_listening_socket_addr", node_name);
         char *socket_addr = calloc(16, sizeof(char));
         arr_listening_socket_addrs[node_idx] = socket_addr;
         DefineCustomStringVariable(sock_addr_str, NULL, NULL, &(arr_listening_socket_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
 
         char sock_port_str[40] = {0};
-        strcpy(sock_port_str, node_name);
-        strcat(sock_port_str, "_listening_socket_port");
+        sprintf(sock_port_str, "%s_listening_socket_port", node_name);
         DefineCustomIntVariable(sock_port_str, NULL, NULL, &(arr_listening_socket_ports[node_idx]), 15001, 0, 65535, PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
 
         char node_addr_str[40] = {0};
-        strcpy(node_addr_str, node_name);
-        strcat(node_addr_str, "_addr");
+        sprintf(node_addr_str, "%s_addr", node_name);
         char *node_addr = calloc(16, sizeof(char));
         arr_node_addrs[node_idx] = node_addr;
         DefineCustomStringVariable(node_addr_str, NULL, NULL, &(arr_node_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);

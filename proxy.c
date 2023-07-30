@@ -21,12 +21,10 @@
 #include "proxy_log.h"
 // #include "proxy_manager.h"
 
+#define MAX_CHANNELS 1
+
 #define POSTGRES_ADDR ((strcmp(ListenAddresses, "localhost") == 0) ? ("127.0.0.1") : (ListenAddresses))
 #define POSTGRES_CURR_PORT PostPortNumber
-
-static char *proxy_addr;
-static int proxy_port;
-static int max_channels;
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -135,14 +133,17 @@ connect_postgres_server()
     return postgres_socket;
 }
 
-
 static int
-accept_connection(int proxy_socket) 
+accept_connection(int proxy_socket, int node_idx) 
 {
     struct sockaddr_in client_address;
     socklen_t client_len;
     client_address.sin_family = AF_INET;
-    client_address.sin_addr.s_addr = htons(INADDR_ANY); 
+    if (inet_pton(AF_INET, arr_node_addrs[node_idx], &(client_address.sin_addr)) != 1)
+    {
+        elog(ERROR, "error while converting client address with index %d", node_idx);
+        return -1;
+    } 
     // client_address.sin_port = htons(proxy_port); /* здеся будет определённый порт */
     client_len = sizeof(client_address);
 
@@ -209,29 +210,6 @@ delete_channel(Channel *curr_channel, struct pollfd *fds)
     elog(INFO, "channel has been deleted");
 }
 
-static int 
-get_conf_vars()
-{
-    proxy_addr = GetConfigOption("proxy.listening_address", true, false);
-
-    if (strcmp(proxy_addr, "localhost") == 0) {
-        sprintf(proxy_addr, "127.0.0.1");
-    }
- 
-    if (parse_int(GetConfigOption("proxy.port", true, false), &proxy_port, 0, NULL) == false)
-    {
-        elog(ERROR, "error while parsing proxy port to int");
-        return -1;
-    }
-
-    if (parse_int(GetConfigOption("proxy.max_channels", true, false), &max_channels, 0, NULL) == false)
-    {
-        elog(ERROR, "error while parsing max_channels to int");
-        return -1;
-    }
-    return 0;
-}
-
 void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
 {
     elog(INFO, "closing all fds...");
@@ -257,56 +235,55 @@ void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
 void 
 run_proxy()
 { 
-    if (get_conf_vars() == -1)
-    {
-        elog(ERROR, "error while getting conf vars");
-        exit(1);
-    }
+    /*------------- opening all sockets -------------*/
 
-    int proxy_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (proxy_socket == -1)
-    {
-        elog(ERROR, "error while creating proxy socket");
-        exit(1);
-    }
+    int *arr_proxy_sockets = calloc(max_nodes, sizeof(int));
 
-    /* we will still try to bind to occupied address and port, but only if there is no listening socket binding to the address */
-    int opt;
-    if (setsockopt(proxy_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    for (int node_idx = 1; node_idx <= max_nodes; max_nodes++)
     {
-        elog(ERROR, "can not set options for proxy socket");
-        close(proxy_socket);
-        exit(1);
-    }
-
-    struct sockaddr_in proxy_address;
-    proxy_address.sin_family = AF_INET;
-    // proxy_address.sin_addr.s_addr = inet_addr(proxy_addr);
-    if (inet_pton(AF_INET, proxy_addr, &(proxy_address.sin_addr)) != 1)
-    {
-        elog(ERROR, "error while converting proxy address");
-        close(proxy_socket);
-        exit(1);
-    }
-    proxy_address.sin_port = htons(proxy_port);
-
-    if (bind(proxy_socket, (struct sockaddr *)&proxy_address, sizeof(proxy_address)) == -1)
-    {
-        if (errno == EADDRINUSE)
+        arr_proxy_sockets[node_idx] = socket(AF_INET, SOCK_STREAM, 0);
+        if (arr_proxy_sockets[node_idx] == -1)
         {
-            elog(ERROR, "port for proxy is already in use, try another or kill the process using this port");
+            elog(ERROR, "error while creating proxy socket with index %d", node_idx);
+            exit(1);
         }
-        elog(ERROR, "error while binding proxy socket");
-        close(proxy_socket);
-        exit(1);
-    }
 
-    if (listen(proxy_socket, max_channels) == -1)
-    {
-        elog(ERROR, "error while listening from proxy socket");
-        close(proxy_socket);
-        exit(1);
+        if (setsockopt(arr_proxy_sockets[node_idx], SOL_SOCKET, SO_REUSEADDR, NULL, 0) == -1)
+        {
+            elog(ERROR, "can not set options for proxy socket with index %d", node_idx);
+            close(arr_proxy_sockets[node_idx]);
+            exit(1);
+        }
+
+        struct sockaddr_in proxy_address;
+        proxy_address.sin_family = AF_INET;
+        if (inet_pton(AF_INET, arr_listening_socket_addrs[node_idx], &(proxy_address.sin_addr)) != 1)
+        {
+            elog(ERROR, "error while converting proxy address");
+            close(arr_proxy_sockets[node_idx]);
+            exit(1);
+        }
+        proxy_address.sin_port = htons(arr_listening_socket_ports[node_idx]);
+
+        if (bind(arr_proxy_sockets[node_idx], (struct sockaddr *)&proxy_address, sizeof(proxy_address)) == -1)
+        {
+            if (errno == EADDRINUSE)
+            {
+                elog(ERROR, "port %d for proxy is already in use, try another or kill the process using this port", arr_listening_socket_ports[node_idx]);
+            }
+            elog(ERROR, "error while binding proxy socket");
+            close(arr_proxy_sockets[node_idx]);
+            exit(1);
+        }
+
+        if (listen(arr_proxy_sockets[node_idx], MAX_CHANNELS) == -1)
+        {
+            elog(ERROR, "error while listening from proxy socket");
+            close(arr_proxy_sockets[node_idx]);
+            exit(1);
+        }
     }
+    /*------------- opening all sockets -------------*/
 
     elog(INFO, "proxy server is running and waiting for connections...");
 
@@ -314,11 +291,15 @@ run_proxy()
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
     
-    size_t fds_len = max_channels * 2 + 1; /* max free idx of array of fds */
-    struct pollfd *fds = malloc(fds_len * sizeof(struct pollfd)); /* 'cause we have 2 fds in one channel + 1 for proxy socket */
+    size_t fds_len = MAX_CHANNELS * 2 + max_nodes + 1; /* max free idx of array of fds */
+    struct pollfd *fds = malloc(fds_len * sizeof(struct pollfd));
     memset(fds, -1, fds_len * sizeof(struct pollfd));
-    fds[0].fd = proxy_socket;
-    fds[0].events = POLLIN;
+
+    for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
+    {
+        fds[node_idx].fd = arr_proxy_sockets[node_idx];
+        fds[node_idx].fd = POLLIN;
+    }
 
     for (;;)
     {
@@ -329,20 +310,23 @@ run_proxy()
             break;
         }
 
-        /* if proxy socket is ready to accept connection then accept it and create channel */
-        if ((fds[0].revents & POLLIN))
-        { 
-            client_socket = accept_connection(proxy_socket);
-            if (client_socket == -1)
-            {
-                break;
+        /* if any proxy socket is ready to accept connection then accept it and create new channel */
+        for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
+        {
+            if ((fds[node_idx].revents & POLLIN))
+            { 
+                client_socket = accept_connection(fds[node_idx].fd, node_idx);
+                if (client_socket == -1)
+                {
+                    break;
+                }
+                postgres_socket = connect_postgres_server();
+                if (postgres_socket == -1)
+                {
+                    break;
+                }
+                channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
             }
-            postgres_socket = connect_postgres_server();
-            if (postgres_socket == -1)
-            {
-                break;
-            }
-            channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
         }
 
         foreach(cell, channels)
