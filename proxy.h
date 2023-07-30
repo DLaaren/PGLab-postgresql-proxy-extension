@@ -14,11 +14,6 @@ typedef struct Channel {
     int bytes_received_from_back;
 } Channel;
 
-static int max_nodes;
-static char **arr_listening_socket_addrs;
-static int *arr_listening_socket_ports;
-static char **arr_node_addrs;
-
 /*
  * Runs proxy
  */

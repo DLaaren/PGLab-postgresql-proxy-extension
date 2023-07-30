@@ -17,6 +17,11 @@ void _PG_fini(void);
 
 PGDLLEXPORT void proxy_main(Datum main_arg);
 
+static int max_nodes;
+static char **arr_listening_socket_addrs;
+static int *arr_listening_socket_ports;
+static char **arr_node_addrs;
+
 static void
 free_arrs()
 {
@@ -33,7 +38,7 @@ free_arrs()
 static void
 sigint_handler(SIGNAL_ARGS)
 {
-    elog(INFO, "proxy received SIGINT");
+    elog(LOG, "proxy received SIGINT");
     shutdown_proxy();
     exit(2);
 }
@@ -41,7 +46,7 @@ sigint_handler(SIGNAL_ARGS)
 static void
 sigquit_handler(SIGNAL_ARGS)
 {
-    elog(INFO, "proxy received SIGQUIT");
+    elog(LOG, "proxy received SIGQUIT");
     // shutdown_proxy();
     exit(2);
 }
@@ -49,10 +54,11 @@ sigquit_handler(SIGNAL_ARGS)
 static void
 sigterm_handler(SIGNAL_ARGS)
 {
-    elog(INFO, "proxy received SIGTERM");
+    elog(LOG, "proxy received SIGTERM");
     shutdown_proxy();
     exit(2);
 }
+
 
 void
 proxy_main(Datum main_arg)
@@ -65,7 +71,7 @@ proxy_main(Datum main_arg)
         sigaction(SIGQUIT, &act_sigquit, NULL) == -1 ||
         sigaction(SIGTERM, &act_sigterm, NULL) == -1)
     {
-        elog(ERROR, "sigaction() error");
+        elog(LOG, "sigaction() error");
         exit(1);
     }
 
@@ -77,7 +83,7 @@ void
 _PG_init(void)
 {
     if (IsUnderPostmaster)
-		ereport(ERROR,
+		ereport(LOG,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("proxy must be loaded via shared_preload_libraries")));
     
@@ -94,6 +100,7 @@ _PG_init(void)
                             NULL,
                             NULL
                             );
+
     arr_listening_socket_addrs = calloc(max_nodes, sizeof(char*));
     arr_listening_socket_ports = calloc(max_nodes, sizeof(int));
     arr_node_addrs = calloc(max_nodes, sizeof(char*));
@@ -106,17 +113,46 @@ _PG_init(void)
         sprintf(sock_addr_str, "%s_listening_socket_addr", node_name);
         char *socket_addr = calloc(16, sizeof(char));
         arr_listening_socket_addrs[node_idx] = socket_addr;
-        DefineCustomStringVariable(sock_addr_str, NULL, NULL, &(arr_listening_socket_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+        DefineCustomStringVariable(sock_addr_str,
+                                   NULL,
+                                   NULL,
+                                   &(arr_listening_socket_addrs[node_idx]),
+                                   "localhost",
+                                   PGC_POSTMASTER,
+                                   GUC_NOT_IN_SAMPLE,
+                                   NULL,
+                                   NULL,
+                                   NULL);
 
         char sock_port_str[40] = {0};
         sprintf(sock_port_str, "%s_listening_socket_port", node_name);
-        DefineCustomIntVariable(sock_port_str, NULL, NULL, &(arr_listening_socket_ports[node_idx]), 15001, 0, 65535, PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+        DefineCustomIntVariable(sock_port_str,
+                                NULL,
+                                NULL,
+                                &(arr_listening_socket_ports[node_idx]),
+                                15001,
+                                0,
+                                65535, 
+                                PGC_POSTMASTER, 
+                                GUC_NOT_IN_SAMPLE, 
+                                NULL, 
+                                NULL, 
+                                NULL);
 
         char node_addr_str[40] = {0};
         sprintf(node_addr_str, "%s_addr", node_name);
         char *node_addr = calloc(16, sizeof(char));
         arr_node_addrs[node_idx] = node_addr;
-        DefineCustomStringVariable(node_addr_str, NULL, NULL, &(arr_node_addrs[node_idx]), "localhost", PGC_POSTMASTER, GUC_NOT_IN_SAMPLE, NULL, NULL, NULL);
+        DefineCustomStringVariable(node_addr_str, 
+                                   NULL, 
+                                   NULL, 
+                                   &(arr_node_addrs[node_idx]), 
+                                   "localhost", 
+                                   PGC_POSTMASTER, 
+                                   GUC_NOT_IN_SAMPLE, 
+                                   NULL, 
+                                   NULL, 
+                                   NULL);
     }
 
     /* DefineCustomIntVariable("proxy.max_channels", 
