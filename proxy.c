@@ -219,13 +219,17 @@ void shutdown_proxy(struct pollfd *fds, size_t fds_len, List *channels)
 {
     elog(LOG, "closing all fds...");
 
-    for (int i = 0; i < fds_len; i++) {
-        if (fds[i].fd != -1) {
-            close(fds[i].fd);
-        }
-    }
+    printf("sockets fd %d \n\n", fds[1].fd);
 
-    list_free(channels);
+    // for (int node_idx = 1; node_idx <= fds_len; node_idx++) {
+    //     if (fds[node_idx].fd != -1) {
+    //         printf("sockets fd %d \n\n", fds[node_idx].fd);
+
+    //         close(fds[node_idx].fd);
+    //     }
+    // }
+
+    // list_free(channels);
 
     elog(LOG, "proxy server is shutting down...");
 }
@@ -245,6 +249,10 @@ find_conf_vars()
         return -1;
     }
 
+    arr_listening_socket_addrs = calloc(max_nodes+1, sizeof(char*));
+    arr_listening_socket_ports = calloc(max_nodes+1, sizeof(int));
+    arr_node_addrs = calloc(max_nodes+1, sizeof(char*));
+
     for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
         char node_name[20] = {0};
@@ -252,7 +260,7 @@ find_conf_vars()
 
         char sock_addr_str[40] = {0};
         sprintf(sock_addr_str, "%s_listening_socket_addr", node_name);
-        arr_listening_socket_addrs[node_idx] = GetConfigOption(sock_addr_str, true, false);
+        arr_listening_socket_addrs[node_idx] = strcmp(GetConfigOption(sock_addr_str, true, false), "localhost") == 0 ? "127.0.0.1" : GetConfigOption(sock_addr_str, true, false);
         if (arr_listening_socket_addrs[node_idx] == NULL)
         {
             // error
@@ -269,14 +277,12 @@ find_conf_vars()
 
         char node_addr_str[40] = {0};
         sprintf(node_addr_str, "%s_addr", node_name);
-        arr_node_addrs[node_idx] = GetConfigOption(node_addr_str, true, false);
+        arr_node_addrs[node_idx] = strcmp(GetConfigOption(node_addr_str, true, false), "localhost") == 0 ? "127.0.0.1" : GetConfigOption(node_addr_str, true, false);
         if (arr_node_addrs[node_idx] == NULL)
         {
             // error
             return -1;
         }
-
-        printf("%s %d %s\n", arr_listening_socket_addrs[node_idx], arr_listening_socket_ports[node_idx], arr_node_addrs[node_idx]);
     }
     return 0;
 }
@@ -284,6 +290,7 @@ find_conf_vars()
 void 
 run_proxy()
 { 
+    elog(LOG, "proxy server is getting config vars...");
     if (find_conf_vars() == -1)
     {
         elog(LOG, "could not get config variables");
@@ -291,9 +298,7 @@ run_proxy()
     }
     /*------------- opening all sockets -------------*/
 
-    printf("max_nodes %d \n\n", max_nodes);
-
-    int *arr_proxy_sockets = calloc(max_nodes, sizeof(int));
+    int *arr_proxy_sockets = calloc(max_nodes + 1, sizeof(int));
 
     for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
@@ -301,13 +306,17 @@ run_proxy()
         if (arr_proxy_sockets[node_idx] == -1)
         {
             elog(LOG, "error while creating proxy socket with index %d", node_idx);
+            //close all sockets
             exit(1);
         }
 
-        if (setsockopt(arr_proxy_sockets[node_idx], SOL_SOCKET, SO_REUSEADDR, NULL, 0) == -1)
+        printf("socket fds : %d\n", arr_proxy_sockets[node_idx]);
+
+        int opt;
+        if (setsockopt(arr_proxy_sockets[node_idx], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
         {
             elog(LOG, "can not set options for proxy socket with index %d", node_idx);
-            close(arr_proxy_sockets[node_idx]);
+            //close all sockets
             exit(1);
         }
 
@@ -316,7 +325,7 @@ run_proxy()
         if (inet_pton(AF_INET, arr_listening_socket_addrs[node_idx], &(proxy_address.sin_addr)) != 1)
         {
             elog(LOG, "error while converting proxy address");
-            close(arr_proxy_sockets[node_idx]);
+            //close all sockets
             exit(1);
         }
         proxy_address.sin_port = htons(arr_listening_socket_ports[node_idx]);
@@ -328,14 +337,14 @@ run_proxy()
                 elog(LOG, "port %d for proxy is already in use, try another or kill the process using this port", arr_listening_socket_ports[node_idx]);
             }
             elog(LOG, "error while binding proxy socket");
-            close(arr_proxy_sockets[node_idx]);
+            //close all sockets
             exit(1);
         }
 
         if (listen(arr_proxy_sockets[node_idx], MAX_CHANNELS) == -1)
         {
             elog(LOG, "error while listening from proxy socket");
-            close(arr_proxy_sockets[node_idx]);
+            //close all sockets
             exit(1);
         }
 
@@ -356,7 +365,7 @@ run_proxy()
     for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
         fds[node_idx].fd = arr_proxy_sockets[node_idx];
-        fds[node_idx].fd = POLLIN;
+        fds[node_idx].events = POLLIN;
     }
 
     for (;;)
@@ -373,14 +382,17 @@ run_proxy()
         {
             if ((fds[node_idx].revents & POLLIN))
             { 
+                printf("got connection\n");
                 client_socket = accept_connection(fds[node_idx].fd, node_idx);
                 if (client_socket == -1)
                 {
+                    //error
                     break;
                 }
                 postgres_socket = connect_postgres_server();
                 if (postgres_socket == -1)
                 {
+                    //error
                     break;
                 }
                 channels = create_channel(channels, fds, fds_len, postgres_socket, client_socket);
@@ -447,5 +459,5 @@ run_proxy()
         }
     }
 
-    shutdown_proxy(fds, fds_len, channels);
+    // shutdown_proxy(fds, fds_len, channels);
 }

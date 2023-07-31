@@ -26,7 +26,7 @@ static void
 free_arrs()
 {
     free(arr_listening_socket_ports);
-    for (int node_idx = 0; node_idx < max_nodes; node_idx++)
+    for (int node_idx = 1; node_idx < max_nodes; node_idx++)
     {
         free(arr_listening_socket_addrs[node_idx]);
         free(arr_node_addrs);
@@ -39,7 +39,7 @@ static void
 sigint_handler(SIGNAL_ARGS)
 {
     elog(LOG, "proxy received SIGINT");
-    shutdown_proxy();
+    // shutdown_proxy();
     exit(2);
 }
 
@@ -55,7 +55,7 @@ static void
 sigterm_handler(SIGNAL_ARGS)
 {
     elog(LOG, "proxy received SIGTERM");
-    shutdown_proxy();
+    // shutdown_proxy();
     exit(2);
 }
 
@@ -101,9 +101,9 @@ _PG_init(void)
                             NULL
                             );
 
-    arr_listening_socket_addrs = calloc(max_nodes, sizeof(char*));
-    arr_listening_socket_ports = calloc(max_nodes, sizeof(int));
-    arr_node_addrs = calloc(max_nodes, sizeof(char*));
+    arr_listening_socket_addrs = calloc(max_nodes + 1, sizeof(char*));
+    arr_listening_socket_ports = calloc(max_nodes + 1, sizeof(int));
+    arr_node_addrs = calloc(max_nodes + 1, sizeof(char*));
     for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
         char node_name[20] = {0};
@@ -193,6 +193,6 @@ _PG_init(void)
 void
 _PG_fini()
 {
-    shutdown_proxy();
-    free_arrs();
+    // shutdown_proxy();
+    // free_arrs();
 }
