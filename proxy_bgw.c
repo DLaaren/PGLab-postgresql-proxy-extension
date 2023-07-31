@@ -25,13 +25,13 @@ static char **arr_node_addrs;
 static void
 free_arrs()
 {
-    free(arr_listening_socket_ports);
     for (int node_idx = 1; node_idx < max_nodes; node_idx++)
     {
         free(arr_listening_socket_addrs[node_idx]);
-        free(arr_node_addrs);
+        free(arr_node_addrs[node_idx]);
     }
     free(arr_listening_socket_addrs);
+    free(arr_listening_socket_ports);
     free(arr_node_addrs);
 }
 
@@ -39,7 +39,8 @@ static void
 sigint_handler(SIGNAL_ARGS)
 {
     elog(LOG, "proxy received SIGINT");
-    // shutdown_proxy();
+    shutdown_proxy();
+    free_arrs();
     exit(2);
 }
 
@@ -55,7 +56,8 @@ static void
 sigterm_handler(SIGNAL_ARGS)
 {
     elog(LOG, "proxy received SIGTERM");
-    // shutdown_proxy();
+    shutdown_proxy();
+    free_arrs();
     exit(2);
 }
 
@@ -71,7 +73,7 @@ proxy_main(Datum main_arg)
         sigaction(SIGQUIT, &act_sigquit, NULL) == -1 ||
         sigaction(SIGTERM, &act_sigterm, NULL) == -1)
     {
-        elog(LOG, "sigaction() error");
+        elog(ERROR, "sigaction() error");
         exit(1);
     }
 
@@ -83,7 +85,7 @@ void
 _PG_init(void)
 {
     if (IsUnderPostmaster)
-		ereport(LOG,
+		ereport(FATAL,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("proxy must be loaded via shared_preload_libraries")));
     
@@ -177,8 +179,6 @@ _PG_init(void)
     BackgroundWorker proxy_bgw;
     memset(&proxy_bgw, 0, sizeof(proxy_bgw));
 
-    elog(LOG, "Proxy server bgw has been registered");
-
     proxy_bgw.bgw_flags = BGWORKER_SHMEM_ACCESS;
     proxy_bgw.bgw_start_time = BgWorkerStart_RecoveryFinished;
     proxy_bgw.bgw_restart_time = BGW_DEFAULT_RESTART_INTERVAL;
@@ -188,11 +188,12 @@ _PG_init(void)
     sprintf(proxy_bgw.bgw_type, "proxy_server");
 
     RegisterBackgroundWorker(&proxy_bgw);
+    elog(LOG, "Proxy server bgw has been registered");
 }
 
 void
 _PG_fini()
 {
-    // shutdown_proxy();
-    // free_arrs();
+    shutdown_proxy();
+    free_arrs();
 }
