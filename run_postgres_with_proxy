@@ -22,7 +22,7 @@ DAEMON="$prefix/bin/postmaster"
 # What address to use for postgres
 POSTGRES_ADDR="127.0.0.1"
 # What port to use for postgres
-POSTGRES_PORT="55432"
+POSTGRES_PORT="5432"
 
 FLAGS="-h $POSTGRES_ADDR -p $POSTGRES_PORT -c shared_preload_libraries=proxy"
 

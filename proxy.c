@@ -481,19 +481,17 @@ delete_channel(Channel *curr_channel)
 
 void shutdown_proxy()
 {
-    // for (int node_idx = 1; node_idx <= fds_len; node_idx++) {
-    //     if (fds[node_idx].fd != -1) {
-    //         printf("sockets fd %d \n\n", fds[node_idx].fd);
+    for (int node_idx = 0; node_idx < fds_len; node_idx++) {
+        if (fds[node_idx].fd != -1) {
+            close(fds[node_idx].fd);
+        }
+    }
+    free(arr_listening_socket_addrs);
+    free(arr_listening_socket_ports);
+    free(arr_node_addrs);
+    free(arr_proxy_sockets_fds);
 
-    //         close(fds[node_idx].fd);
-    //     }
-    // }
-
-    // list_free(channels);
+    list_free(channels);
 
     elog(LOG, "proxy server is shutting down...");
 }
-
-/* TODO */
-    /* check pg_indent */
-    /* tap tests */
