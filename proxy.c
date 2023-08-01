@@ -300,7 +300,7 @@ accept_connection(int proxy_socket, int node_idx)
     int client_socket = accept(proxy_socket, (struct sockaddr *)&client_address, &client_len);
     if (client_socket == -1)
     {
-        elog(ERROR, "accept() error for node%d --- cannot accept connection from node%d", node_idx, node_idx);
+        elog(ERROR, "accept() for node%d error --- cannot accept connection from node%d", node_idx, node_idx);
         return -1;
     }
 
