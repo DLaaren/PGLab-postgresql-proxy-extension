@@ -22,7 +22,15 @@ static double randfrom(double min, double max)
 /* FIXME change (void *) type to map type */
 void init_toxic_registry(void *toxic_registry)
 {
-    /* TODO create map which will contain toxics */
+    /* TODO create List which will contain toxics
+     * Посмотреть списки
+     * Создать список
+     * Занести его в shmem
+     * Зарегать токсики в этом списке с помощью register_toxic
+     * 
+     */
+    // List *toxic_registry = toxic_registry
+    
 }
 
 /*
@@ -33,13 +41,22 @@ void register_toxic(void *toxic_registry, char *name, Toxic *toxic)
     /*TODO: need to create map (from another lib or on my own)*/
 }
 
-/* TODO разобраться с тем, как доставать параметры функции с помощью PG_GETARG_* */
+/*  */
 Datum run(PG_FUNCTION_ARGS)
 {
-    Channel *channel = (Channel *) PG_GETARG_POINTER(0);
-    Toxic *toxic = (Toxic *) PG_GETARG_POINTER(1);
+    Channel *channel_port = (Channel *) PG_GETARG_INT32(0);
+    text *toxic_name = PG_GETARG_TEXT_PP(1)
+
+    /* TODO по имени токсика достать указатель на этот токсик */
+
+    // Toxic *toxic = map.get(toxic_name);
+
     toxic->running = 1;
-    if (randfrom(0.0, 1.0) < toxic->toxicity) {
+    /* TODO из разделяемой памяти достать значение toxicity */
+
+    // toxic->toxicity = shmem.toxicity;
+    
+    if (randfrom(0.0, 1.0) <= toxic->toxicity) {
         toxic->pipe(channel);
     }
     else {

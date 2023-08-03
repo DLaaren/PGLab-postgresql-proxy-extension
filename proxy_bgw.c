@@ -176,7 +176,7 @@ _PG_init(void)
     MarkGUCPrefixReserved("proxy");
 
     /* shared memory declaration && allocation */
-
+    
     /* ... */
 
     BackgroundWorker proxy_bgw;

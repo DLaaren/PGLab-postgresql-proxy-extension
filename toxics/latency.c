@@ -5,6 +5,7 @@ Toxic init_toxic() {
     // TODO: с помощью register_toxic
 }
 
-// void do_latency(Channel *channel) {
-//     channel.
-// }
+// pipe
+void do_latency(int port) {
+    // ShmemInitStruct()
+}

@@ -10,12 +10,12 @@
  * Proxy toxy setting struct.
  */
 typedef struct {
-    int speed;
+    List *channels;
     LWLock lock;
-} ProxySettings;
+} ProxyChannels;
 
-extern void
-init_proxy_settings(ProxySettings*);
+extern ProxyChannels *
+init_proxy_settings();
 
 extern Datum 
 set_speed(PG_FUNCTION_ARGS);

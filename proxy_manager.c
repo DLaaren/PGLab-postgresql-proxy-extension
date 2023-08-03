@@ -22,38 +22,43 @@
 
 PG_FUNCTION_INFO_V1(set_speed);
 
-ProxySettings proxy_settings;
-
-
-void 
-init_proxy_settings(ProxySettings *proxy_settings) {
+ProxyChannels *
+init_proxy_settings() {
+    ProxyChannels *proxy_settings;
     bool found;
     char shmem_name[SIZE] = { 0 };
     sprintf(shmem_name, "proxy_settings_%d", MyProcPid);
-    proxy_settings = (ProxySettings*)ShmemInitStruct(shmem_name, 
-                                                     sizeof(ProxySettings), 
+    proxy_settings = (ProxyChannels *) ShmemInitStruct(shmem_name, 
+                                                     sizeof(ProxyChannels), 
                                                      &found);
     if (!found) {
         LWLockInitialize(&proxy_settings->lock, 1);
     } 
+    return proxy_settings;
 }
 
 Datum
 set_speed(PG_FUNCTION_ARGS)
 {
+    ProxyChannels *proxy_channels;
     if (PG_ARGISNULL(0)) {
         elog(ERROR, "could not override param.");
         PG_RETURN_VOID();
     }
 
-    init_proxy_settings(&proxy_settings);
+    ProxyChannels *proxy_settings = init_proxy_settings();
     
-    LWLockAcquire(&proxy_settings.lock, LW_EXCLUSIVE);
+    LWLockAcquire(&proxy_channels.lock, LW_EXCLUSIVE);
     elog(INFO, "proxy server speed change...");
-    proxy_settings.speed = PG_GETARG_INT32(0);
+    proxy_channels.speed = PG_GETARG_INT32(0);
     CHECK_FOR_INTERRUPTS();
-    LWLockRelease(&proxy_settings.lock);
-    elog(INFO, "proxy server speed changed to %d", proxy_settings.speed);
+    LWLockRelease(&proxy_channels.lock);
+    elog(INFO, "proxy server speed changed to %d", proxy_channels.speed);
     PG_RETURN_VOID();
 }
 
+Datum
+get_speed(PG_FUNCTION_ARGS)
+{   
+    ProxyChannels *proxy_settings = init_proxy_settings(&proxy_settings);
+}
