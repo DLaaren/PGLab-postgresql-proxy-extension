@@ -23,7 +23,7 @@
 PG_FUNCTION_INFO_V1(set_speed);
 
 ProxyChannels *
-init_proxy_settings() {
+init_proxy_channels() {
     ProxyChannels *proxy_settings;
     bool found;
     char shmem_name[SIZE] = { 0 };
@@ -33,6 +33,7 @@ init_proxy_settings() {
                                                      &found);
     if (!found) {
         LWLockInitialize(&proxy_settings->lock, 1);
+        proxy_settings->channels = NIL;
     } 
     return proxy_settings;
 }
@@ -46,14 +47,14 @@ set_speed(PG_FUNCTION_ARGS)
         PG_RETURN_VOID();
     }
 
-    ProxyChannels *proxy_settings = init_proxy_settings();
+    ProxyChannels *proxy_settings = init_proxy_channels();
     
-    LWLockAcquire(&proxy_channels.lock, LW_EXCLUSIVE);
+    LWLockAcquire(&proxy_channels->lock, LW_EXCLUSIVE);
     elog(INFO, "proxy server speed change...");
-    proxy_channels.speed = PG_GETARG_INT32(0);
+    //proxy_channels->speed = PG_GETARG_INT32(0);
     CHECK_FOR_INTERRUPTS();
-    LWLockRelease(&proxy_channels.lock);
-    elog(INFO, "proxy server speed changed to %d", proxy_channels.speed);
+    LWLockRelease(&proxy_channels->lock);
+    
     PG_RETURN_VOID();
 }
 

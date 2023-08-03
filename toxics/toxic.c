@@ -45,7 +45,7 @@ void register_toxic(void *toxic_registry, char *name, Toxic *toxic)
 Datum run(PG_FUNCTION_ARGS)
 {
     Channel *channel_port = (Channel *) PG_GETARG_INT32(0);
-    text *toxic_name = PG_GETARG_TEXT_PP(1)
+    text *toxic_name = PG_GETARG_TEXT_PP(1);
 
     /* TODO по имени токсика достать указатель на этот токсик */
 

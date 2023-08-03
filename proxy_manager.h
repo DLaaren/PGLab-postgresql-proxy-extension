@@ -5,6 +5,7 @@
 
 #include "postgres.h"
 #include "storage/lwlock.h"
+#include "nodes/pg_list.h"
 
 /*
  * Proxy toxy setting struct.
@@ -15,7 +16,7 @@ typedef struct {
 } ProxyChannels;
 
 extern ProxyChannels *
-init_proxy_settings();
+init_proxy_channels();
 
 extern Datum 
 set_speed(PG_FUNCTION_ARGS);

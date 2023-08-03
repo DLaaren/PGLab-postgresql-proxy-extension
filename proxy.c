@@ -19,7 +19,7 @@
 
 #include "proxy.h"
 #include "proxy_log.h"
-// #include "proxy_manager.h"
+#include "proxy_manager.h"
 
 #define MAX_CHANNELS 1
 
@@ -77,6 +77,8 @@ run_proxy()
 
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
+
+    channels = init_proxy_channels()->channels;
     
     fds_len = MAX_CHANNELS * 2 * max_nodes + max_nodes + 1; /* max free idx of array of fds */
     fds = malloc(fds_len * sizeof(struct pollfd));
