@@ -2,7 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "postgres.h"
+
 #include "toxic.h"
+
+PG_FUNCTION_INFO_V1(run);
 
 /* generate a random floating point number from min to max */
 static double randfrom(double min, double max) 
@@ -29,8 +33,11 @@ void register_toxic(void *toxic_registry, char *name, Toxic *toxic)
     /*TODO: need to create map (from another lib or on my own)*/
 }
 
-void run(Channel* channel, Toxic *toxic) 
+/* TODO разобраться с тем, как доставать параметры функции с помощью PG_GETARG_* */
+Datum run(PG_FUNCTION_ARGS)
 {
+    Channel *channel = (Channel *) PG_GETARG_POINTER(0);
+    Toxic *toxic = (Toxic *) PG_GETARG_POINTER(1);
     toxic->running = 1;
     if (randfrom(0.0, 1.0) < toxic->toxicity) {
         toxic->pipe(channel);

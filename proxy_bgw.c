@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include "proxy.h"
+#include "proxy_manager.h"
 
 PG_MODULE_MAGIC;
 
@@ -76,6 +77,8 @@ proxy_main(Datum main_arg)
         elog(ERROR, "sigaction() error");
         exit(1);
     }
+    ProxySettings proxy_settings;
+    init_proxy_settings(&proxy_settings);
 
     BackgroundWorkerUnblockSignals();
     run_proxy();
