@@ -1,3 +1,4 @@
+ 
 #!/usr/bin/env perl
 
 # Each test script should begin with:
@@ -29,13 +30,16 @@ $node1->start();
 # Test set-up
 #
 
-my $ret = $node1->psql('postgres', 'SELECT 506',
-                       extra_params => ['-h 127.0.0.1', '-p 15001']);
-                       
-$ret = $node1->psql('postgres', 'SELECT 505',
-                       extra_params => ['-h 127.0.0.1', '-p 15001']);
-                       
-is ($ret, '505', 'SELECT 505 returns 505');
+my $res;
+my $addr = "port=15001 host=127.0.0.1 dbname='postgres'";
+$node1->psql('postgres', 'SELECT (505 + 101)',
+                        stdout => \$res,
+                       connstr => $addr);
+
+
+#my $res = qx/ psql -h 127.0.0.1 -p 15001 / ;
+
+is ($res, '606', 'SELECT (505+101) returns 606');
 
 
 # Stop the PostgreSQL server

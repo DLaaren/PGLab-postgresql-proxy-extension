@@ -25,6 +25,7 @@
 
 #define POSTGRES_ADDR ((strcmp(ListenAddresses, "localhost") == 0) ? ("127.0.0.1") : (ListenAddresses))
 #define POSTGRES_CURR_PORT PostPortNumber
+#define POSTGRES_SOCKET_DIR Unix_socket_directories
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define IS_LOCALHOST(addr) ((strcmp(addr, "localhost") == 0) ? ("127.0.0.1") : (addr))
@@ -324,16 +325,43 @@ connect_postgres_server()
 
     struct sockaddr_in postgres_address;
     postgres_address.sin_family = AF_INET;
-    if (inet_pton(AF_INET, POSTGRES_ADDR, &(postgres_address.sin_addr)) != 1)
+    int err;
+    if ((err = inet_pton(AF_INET, POSTGRES_ADDR, &(postgres_address.sin_addr))) != 1)
     {
-        elog(LOG, "inet_pton() error --- cannot convert postgres server address");
-        return -1;
+        if (err == 0) 
+        {
+            elog(WARNING, "postgres addr is NULL -- trying connect to UNIX-socket");
+            close(postgres_socket);
+            return connect_postgres_server_using_unix_socket();
+        }
+        else {
+            elog(LOG, "inet_pton() error --- cannot convert postgres server address");
+            return -1;
+        }
     }
     postgres_address.sin_port = htons(POSTGRES_CURR_PORT);
 
     if (connect(postgres_socket, (struct sockaddr *)&postgres_address, sizeof(postgres_address)) == -1)
     {
         elog(LOG, "connect() error --- cannot connect to postgres server");
+        return -1;
+    }
+
+    elog(LOG, "proxy has connected to postgres server successfully");
+    return postgres_socket;
+}
+
+int
+connect_postgres_server_using_unix_socket()
+{
+    int postgres_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un postgress_unix_socket_address;
+    postgress_unix_socket_address.sun_family = AF_UNIX;
+    sprintf(postgress_unix_socket_address.sun_path, "%s/.s.PGSQL.%d", POSTGRES_SOCKET_DIR, POSTGRES_CURR_PORT);
+
+    if (connect(postgres_socket, (struct sockaddr *)&postgress_unix_socket_address, sizeof(postgress_unix_socket_address)) == -1)
+    {
+        elog(LOG, "connect() error --- cannot connect to postgres server via unix socket");
         return -1;
     }
 
