@@ -51,7 +51,7 @@ set_speed(PG_FUNCTION_ARGS)
     
     LWLockAcquire(&proxy_channels->lock, LW_EXCLUSIVE);
     elog(INFO, "proxy server speed change...");
-    //proxy_channels->speed = PG_GETARG_INT32(0);
+    
     CHECK_FOR_INTERRUPTS();
     LWLockRelease(&proxy_channels->lock);
     
