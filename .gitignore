@@ -1,3 +1,4 @@
 ./proxy
 ./*.o
 ./*.so
+./tmp_check
