@@ -47,7 +47,8 @@ Datum run(PG_FUNCTION_ARGS)
     /* TODO по имени токсика достать указатель на этот токсик */
 
     List *toxic_registry = init_toxic_registry();
-
+    Toxic toxic = list.find(toxic_name);
+    toxic.pipe(channel_port);
     
     // Toxic *toxic = map.get(toxic_name);
 

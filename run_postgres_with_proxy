@@ -4,7 +4,8 @@
 prefix=/usr/local/pgsql
 
 # Data directory
-PGDATA="/var/lib/postgres/data"
+# PGDATA="/var/lib/postgres/data"
+PGDATA="/usr/local/pgsql/data"
 
 # Who to run the postmaster as, usually "postgres".  (NOT "root")
 PGUSER=postgres
