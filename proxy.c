@@ -24,8 +24,6 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define IS_LOCALHOST(addr) ((strcmp(addr, "localhost") == 0) ? ("127.0.0.1") : (addr))
 
-#define MAX_CHANNELS 1
-
 #define POSTGRES_ADDR (IS_LOCALHOST(ListenAddresses)) // ((strcmp(ListenAddresses, "localhost") == 0) ? ("127.0.0.1") : (ListenAddresses))
 #define POSTGRES_CURR_PORT PostPortNumber
 #define POSTGRES_SOCKET_DIR Unix_socket_directories
@@ -127,7 +125,7 @@ run_proxy()
                     continue;
                 }
 
-                channels = create_channel(postgres_socket, client_socket);
+                channels = create_channel(postgres_socket, client_socket, arr_listening_socket_ports[node_idx]);
             }
         }
 
@@ -380,7 +378,7 @@ connect_postgres_server_using_unix_socket()
 
 
 List *
-create_channel(int postgres_socket, int client_socket)
+create_channel(int postgres_socket, int client_socket, int port)
 {
     Channel *new_channel = (Channel *)calloc(1, sizeof(Channel));
 
@@ -404,6 +402,7 @@ create_channel(int postgres_socket, int client_socket)
         }
         if (client_fd_inserted == true && postgres_fd_inserted == true)
         {
+            new_channel->port = port;
             break;
         }
     }

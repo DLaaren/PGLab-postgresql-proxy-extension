@@ -12,6 +12,7 @@ typedef struct Channel {
     char back_to_front[BUFFER_SIZE];
     int bytes_received_from_front;
     int bytes_received_from_back;
+    int port;
 } Channel;
 
 /*
