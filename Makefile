@@ -4,7 +4,7 @@ OBJS = \
 	proxy.o \
 	proxy_bgw.o \
 	proxy_log.o \
-	proxy_manager.o
+	#proxy_manager.o
 	
 # EXTENSION = proxy
 # DATA = proxy--1.0.sql

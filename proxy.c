@@ -19,21 +19,22 @@
 
 #include "proxy.h"
 #include "proxy_log.h"
-#include "proxy_manager.h"
-
-#define MAX_CHANNELS 1
-
-#define POSTGRES_ADDR ((strcmp(ListenAddresses, "localhost") == 0) ? ("127.0.0.1") : (ListenAddresses))
-#define POSTGRES_CURR_PORT PostPortNumber
-#define POSTGRES_SOCKET_DIR Unix_socket_directories
+// #include "proxy_manager.h"
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define IS_LOCALHOST(addr) ((strcmp(addr, "localhost") == 0) ? ("127.0.0.1") : (addr))
+
+#define MAX_CHANNELS 1
+
+#define POSTGRES_ADDR (IS_LOCALHOST(ListenAddresses)) // ((strcmp(ListenAddresses, "localhost") == 0) ? ("127.0.0.1") : (ListenAddresses))
+#define POSTGRES_CURR_PORT PostPortNumber
+#define POSTGRES_SOCKET_DIR Unix_socket_directories
 
 static int max_nodes;
 static char **arr_listening_socket_addrs;
 static int *arr_listening_socket_ports;
 static char **arr_node_addrs;
+static int max_connections;
 
 static int *arr_proxy_sockets_fds;
 static List *channels = NIL;
@@ -78,9 +79,9 @@ run_proxy()
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
 
-    channels = init_proxy_channels()->channels;
+    // channels = init_proxy_channels()->channels;
     
-    fds_len = MAX_CHANNELS * 2 * max_nodes + max_nodes + 1; /* max free idx of array of fds */
+    fds_len = max_connections * 2 * max_nodes + max_nodes + 1; /* max free idx of array of fds */
     fds = malloc(fds_len * sizeof(struct pollfd));
     memset(fds, -1, fds_len * sizeof(struct pollfd));
 
@@ -195,6 +196,12 @@ find_conf_vars()
         return -1;
     }
 
+    if (parse_int(GetConfigOption("proxy.max_connections", true, false), &max_connections, 0, NULL) == false)
+    {
+        elog(ERROR, "GetConfigOption() error --- cannot get max_connections value");
+        return -1;
+    }
+
     arr_listening_socket_addrs = calloc(max_nodes+1, sizeof(char*));
     arr_listening_socket_ports = calloc(max_nodes+1, sizeof(int));
     arr_node_addrs = calloc(max_nodes+1, sizeof(char*));
@@ -274,7 +281,7 @@ open_proxy_listening_sockets()
             return -1;
         }
 
-        if (listen(arr_proxy_sockets_fds[node_idx], MAX_CHANNELS) == -1)
+        if (listen(arr_proxy_sockets_fds[node_idx], max_connections) == -1)
         {
             elog(ERROR, "listen() for node%d error --- cannot preapare proxy listening socket to accept connections", node_idx);
             return -1;

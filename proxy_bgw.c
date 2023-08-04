@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include "proxy.h"
-#include "proxy_manager.h"
+// #include "proxy_manager.h"
 
 PG_MODULE_MAGIC;
 
@@ -22,11 +22,12 @@ static int max_nodes;
 static char **arr_listening_socket_addrs;
 static int *arr_listening_socket_ports;
 static char **arr_node_addrs;
+static int max_connections;
 
 static void
 free_arrs()
 {
-    for (int node_idx = 1; node_idx < max_nodes; node_idx++)
+    for (int node_idx = 1; node_idx <= max_nodes; node_idx++)
     {
         free(arr_listening_socket_addrs[node_idx]);
         free(arr_node_addrs[node_idx]);
@@ -50,6 +51,7 @@ sigquit_handler(SIGNAL_ARGS)
 {
     elog(LOG, "proxy received SIGQUIT");
     // shutdown_proxy();
+    // free_arrs();
     exit(2);
 }
 
@@ -77,8 +79,8 @@ proxy_main(Datum main_arg)
         elog(ERROR, "sigaction() error");
         exit(1);
     }
-    ProxySettings proxy_settings;
-    init_proxy_settings(&proxy_settings);
+    // ProxySettings proxy_settings;
+    // init_proxy_settings(&proxy_settings);
 
     BackgroundWorkerUnblockSignals();
     run_proxy();
@@ -98,7 +100,7 @@ _PG_init(void)
                             &max_nodes,
                             1,
                             0,
-                            10000,
+                            1000,
                             PGC_POSTMASTER,
                             GUC_NOT_IN_SAMPLE, /* the value can not be changed after the server start */
                             NULL,
@@ -135,7 +137,7 @@ _PG_init(void)
                                 NULL,
                                 NULL,
                                 &(arr_listening_socket_ports[node_idx]),
-                                15001,
+                                15000 + node_idx,
                                 0,
                                 65535, 
                                 PGC_POSTMASTER, 
@@ -160,18 +162,18 @@ _PG_init(void)
                                    NULL);
     }
 
-    /* DefineCustomIntVariable("proxy.max_channels", 
-                            "This variable defines the maximum possible channels", 
+    DefineCustomIntVariable("proxy.max_connections", 
+                            "This variable defines the maximum possible connections per socket", 
                             NULL, 
-                            &max_channels, 
-                            15, 
+                            &max_connections, 
+                            max_nodes + 1, 
                             0, 
                             100000, 
                             PGC_POSTMASTER, 
                             GUC_NOT_IN_SAMPLE, 
                             NULL, 
                             NULL, 
-                            NULL); */
+                            NULL);
 
     MarkGUCPrefixReserved("proxy");
 
