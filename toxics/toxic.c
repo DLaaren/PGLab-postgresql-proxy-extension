@@ -1,8 +1,8 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "toxic.h"
+#include "postgres.h"
 
 PG_FUNCTION_INFO_V1(run);
 
@@ -43,25 +43,31 @@ Datum run(PG_FUNCTION_ARGS)
 {
     Channel *channel_port = (Channel *) PG_GETARG_INT32(0);
     text *toxic_name = PG_GETARG_TEXT_PP(1);
+    List *toxic_registry = init_toxic_registry();
 
     /* TODO по имени токсика достать указатель на этот токсик */
-
-    List *toxic_registry = init_toxic_registry();
-    Toxic toxic = list.find(toxic_name);
-    toxic.pipe(channel_port);
-    
-    // Toxic *toxic = map.get(toxic_name);
-
-    toxic->running = 1;
+    Toxic *toxic = find_toxic(*toxic_name, toxic_registry);
+    //toxic->running = 1;
     /* TODO из разделяемой памяти достать значение toxicity */
 
     // toxic->toxicity = shmem.toxicity;
     
     if (randfrom(0.0, 1.0) <= toxic->toxicity) {
-        toxic->pipe(channel);
+        toxic->pipe(channel_port);
     }
     else {
         /* FIXME run some toxic which do nothing (NoopToxic) */
-        return;
     }
+    return;
+}
+
+Toxic *find_toxic(text toxic_name, List *toxic_registry) {
+    ListCell *cell;
+    foreach(cell, toxic_registry) {
+        Toxic *currentToxic = lfirst(cell);
+        if (strcmp(currentToxic->name, toxic_name.vl_dat) == 0) {
+            return currentToxic;
+        }
+    }
+    return NULL;
 }

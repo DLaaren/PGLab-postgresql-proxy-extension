@@ -50,7 +50,7 @@ static int read_data_back_to_front(Channel *curr_channel);
 static int write_data_front_to_back(Channel *curr_channel);
 static int write_data_back_to_front(Channel *curr_channel);
 
-static List *create_channel(int postgres_socket, int client_socket);
+static List *create_channel(int postgres_socket, int client_socket, int port);
 static void delete_channel(Channel *curr_channel);
 
 void 
