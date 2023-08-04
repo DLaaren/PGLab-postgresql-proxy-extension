@@ -15,18 +15,17 @@ static double randfrom(double min, double max)
 }
 
 /*
- * Toxic registry initialization ()
+ * Toxic registry initialization
  */
-/* FIXME change (void *) type to map type */
 List *init_toxic_registry()
 {
     /* TODO create List which will contain toxics
-     * Посмотреть списки
      * Создать список
      * Занести его в shmem
      * Зарегать токсики в этом списке с помощью register_toxic
      */
     List *toxic_registry = NIL;
+
     // List *toxic_registry = toxic_registry
     return toxic_registry;
 }

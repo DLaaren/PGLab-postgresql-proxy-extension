@@ -5,6 +5,8 @@
 #include "nodes/pg_list.h"
 #include "../proxy.h"
 
+#include "latency.h"
+
 // toxic_name_*port* -> Toxic *latency (example)
 typedef struct {
     char *name; /* type + stream */
