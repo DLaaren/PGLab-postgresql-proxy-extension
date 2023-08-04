@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "postgres.h"
-
 #include "toxic.h"
 
 PG_FUNCTION_INFO_V1(run);
@@ -20,17 +18,17 @@ static double randfrom(double min, double max)
  * Toxic registry initialization ()
  */
 /* FIXME change (void *) type to map type */
-void init_toxic_registry(void *toxic_registry)
+List *init_toxic_registry()
 {
     /* TODO create List which will contain toxics
      * Посмотреть списки
      * Создать список
      * Занести его в shmem
      * Зарегать токсики в этом списке с помощью register_toxic
-     * 
      */
+    List *toxic_registry = NIL;
     // List *toxic_registry = toxic_registry
-    
+    return toxic_registry;
 }
 
 /*
@@ -49,6 +47,9 @@ Datum run(PG_FUNCTION_ARGS)
 
     /* TODO по имени токсика достать указатель на этот токсик */
 
+    List *toxic_registry = init_toxic_registry();
+
+    
     // Toxic *toxic = map.get(toxic_name);
 
     toxic->running = 1;

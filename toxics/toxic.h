@@ -1,7 +1,10 @@
 #ifndef TOXIC_H
 #define TOXIC_H
 
+#include "postgres.h"
+#include "nodes/pg_list.h"
 #include "../proxy.h"
+
 // toxic_name_*port* -> Toxic *latency (example)
 typedef struct {
     char *name; /* type + stream */
@@ -12,9 +15,9 @@ typedef struct {
     void (*pipe)(int port); /* main toxic function */
 } Toxic;
 
-extern void init_toxic_registry(void *toxic_registry);
+extern List *init_toxic_registry();
 extern void register_toxic(void *toxic_registry, char *name, Toxic *toxic);
-extern Datum run(int *channel_port, text *toxic_name);
+extern Datum run(PG_FUNCTION_ARGS);
 
 // TODO добавить List *channels в shmem с помощью InitShmem, чтобы можно было менять состояние канала из любого места
 #endif /* TOXIC_H */
