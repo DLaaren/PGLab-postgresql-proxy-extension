@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include "toxic.h"
-#include "postgres.h"
+#include "storage/shmem.h"
 
 PG_FUNCTION_INFO_V1(run);
 
@@ -41,12 +41,27 @@ void register_toxic(void *toxic_registry, char *name, Toxic *toxic)
 /*  */
 Datum run(PG_FUNCTION_ARGS)
 {
-    Channel *channel_port = (Channel *) PG_GETARG_INT32(0);
+    if (PG_ARGISNULL(0)) {
+        elog(ERROR, "Cannot get name of toxic and channel port.\nrun(<toxic_name>, <port>)");
+        PG_RETURN_VOID();
+    }
+
+    int channel_port = PG_GETARG_INT32(0);
+    Channel *channel = find_channel(channel_port);
+    if (channel_port == NULL) {
+        elog(ERROR, "Cannot find channel port %d", channel_port);
+        PG_RETURN_VOID();
+    }
+
     text *toxic_name = PG_GETARG_TEXT_PP(1);
     List *toxic_registry = init_toxic_registry();
 
     /* TODO по имени токсика достать указатель на этот токсик */
     Toxic *toxic = find_toxic(*toxic_name, toxic_registry);
+    if (toxic == NULL) {
+        elog(ERROR, "Cannot find toxic %s", toxic_name);
+        PG_RETURN_VOID();
+    }
     //toxic->running = 1;
     /* TODO из разделяемой памяти достать значение toxicity */
 
@@ -54,19 +69,33 @@ Datum run(PG_FUNCTION_ARGS)
     
     if (randfrom(0.0, 1.0) <= toxic->toxicity) {
         toxic->pipe(channel_port);
+        elog(INFO, "%s is working.", toxic_name);
     }
     else {
-        /* FIXME run some toxic which do nothing (NoopToxic) */
+        elog(INFO, "%s is not working.", toxic_name);
     }
-    return;
+    PG_RETURN_VOID();;
 }
 
 Toxic *find_toxic(text toxic_name, List *toxic_registry) {
     ListCell *cell;
     foreach(cell, toxic_registry) {
-        Toxic *currentToxic = lfirst(cell);
-        if (strcmp(currentToxic->name, toxic_name.vl_dat) == 0) {
-            return currentToxic;
+        Toxic *current_toxic = lfirst(cell);
+        if (strcmp(current_toxic->name, toxic_name.vl_dat) == 0) {
+            return current_toxic;
+        }
+    }
+    return NULL;
+}
+
+
+Channel *find_channel(int port) {
+    ProxyChannels *proxy_channels = init_proxy_channels(); 
+    ListCell *cell;
+    foreach(cell, proxy_channels->channels) {
+        Channel *channel = lfirst(cell);
+        if (channel->port == port) {
+            return channel;
         }
     }
     return NULL;

@@ -531,3 +531,17 @@ void shutdown_proxy()
 
     elog(LOG, "proxy server is shutting down...");
 }
+
+ProxyChannels *
+init_proxy_channels() {
+    ProxyChannels *proxy_settings;
+    bool found;
+    proxy_settings = (ProxyChannels *) ShmemInitStruct("proxy_channels", 
+                                                     sizeof(ProxyChannels), 
+                                                     &found);
+    if (!found) {
+        LWLockInitialize(&proxy_settings->lock, 1);
+        proxy_settings->channels = NIL;
+    } 
+    return proxy_settings;
+}

@@ -2,6 +2,7 @@
 #define TOXIC_H
 
 #include "postgres.h"
+#include "fmgr.h"
 #include "nodes/pg_list.h"
 #include "../proxy.h"
 
