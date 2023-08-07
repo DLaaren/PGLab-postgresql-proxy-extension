@@ -14,22 +14,15 @@ typedef struct Channel {
     int bytes_received_from_front;
     int bytes_received_from_back;
     int port;
+    LWLock lock;
 } Channel;
 
 /*
-* ProxyChannels is a struct in postgres shared memory.
+* Init list channels struct in shared memory.
 * Use in ShmemInitStruct function "proxy_channels" as name arguement to
 * access channels list.
 */
-typedef struct {
-    List *channels;
-    LWLock lock;
-} ProxyChannels;
-
-/*
-* Init proxy channels struct
-*/
-ProxyChannels *
+List *
 init_proxy_channels();
 
 /*

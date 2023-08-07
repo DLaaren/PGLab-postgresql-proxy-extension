@@ -2,7 +2,6 @@
 #include <stdlib.h>
 
 #include "toxic.h"
-#include "storage/shmem.h"
 
 PG_FUNCTION_INFO_V1(run);
 
@@ -90,9 +89,9 @@ Toxic *find_toxic(text toxic_name, List *toxic_registry) {
 
 
 Channel *find_channel(int port) {
-    ProxyChannels *proxy_channels = init_proxy_channels(); 
+    List *proxy_channels = init_proxy_channels(); 
     ListCell *cell;
-    foreach(cell, proxy_channels->channels) {
+    foreach(cell, proxy_channels) {
         Channel *channel = lfirst(cell);
         if (channel->port == port) {
             return channel;

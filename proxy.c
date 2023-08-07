@@ -16,6 +16,7 @@
 #include "postmaster/postmaster.h"
 #include "utils/guc.h"
 #include "nodes/pg_list.h"
+#include "storage/shmem.h"
 
 #include "proxy.h"
 #include "proxy_log.h"
@@ -77,7 +78,7 @@ run_proxy()
     ListCell *cell = NULL;
     int postgres_socket, client_socket;
 
-    // channels = init_proxy_channels()->channels;
+    channels = init_proxy_channels();
     
     fds_len = max_connections * 2 * max_nodes + max_nodes + 1; /* max free idx of array of fds */
     fds = malloc(fds_len * sizeof(struct pollfd));
@@ -381,6 +382,7 @@ List *
 create_channel(int postgres_socket, int client_socket, int port)
 {
     Channel *new_channel = (Channel *)calloc(1, sizeof(Channel));
+    LWLockInitialize(&(new_channel->lock), 1);
 
     bool postgres_fd_inserted = false;
     bool client_fd_inserted = false;
@@ -532,16 +534,15 @@ void shutdown_proxy()
     elog(LOG, "proxy server is shutting down...");
 }
 
-ProxyChannels *
+List *
 init_proxy_channels() {
-    ProxyChannels *proxy_settings;
+    List *proxy_channels;
     bool found;
-    proxy_settings = (ProxyChannels *) ShmemInitStruct("proxy_channels", 
-                                                     sizeof(ProxyChannels), 
+    proxy_channels = (List *) ShmemInitStruct("proxy_channels", 
+                                                     max_connections * sizeof(List), 
                                                      &found);
     if (!found) {
-        LWLockInitialize(&proxy_settings->lock, 1);
-        proxy_settings->channels = NIL;
+        proxy_channels = NIL;
     } 
-    return proxy_settings;
+    return proxy_channels;
 }
