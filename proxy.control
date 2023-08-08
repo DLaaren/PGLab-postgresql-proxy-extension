@@ -1,0 +1,5 @@
+# proxy extension
+comment = 'proxying connection between client and postgres server'
+default_version = '1.0'
+module_pathname = '$libdir/proxy'
+relocatable = true
