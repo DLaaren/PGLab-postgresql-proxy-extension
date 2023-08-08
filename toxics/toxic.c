@@ -68,7 +68,7 @@ Datum run(PG_FUNCTION_ARGS)
     // toxic->toxicity = shmem.toxicity;
     
     if (randfrom(0.0, 1.0) <= toxic->toxicity) {
-        toxic->pipe(channel_port);
+        toxic->pipe(channel);
         elog(INFO, "%s is working.", toxic_name);
     }
     else {

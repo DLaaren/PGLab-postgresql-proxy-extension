@@ -13,7 +13,7 @@ typedef struct {
     char *stream; /* upstream (client -> server) or downstream (server -> client) */
     double toxicity;
     int running;
-    void (*pipe)(int port); /* main toxic function */
+    void (*pipe)(Channel *); /* main toxic function */
 } Toxic;
 
 extern List *init_toxic_registry();
