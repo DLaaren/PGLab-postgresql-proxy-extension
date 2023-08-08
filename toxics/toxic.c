@@ -24,6 +24,7 @@ List *init_toxic_registry()
      * Зарегать токсики в этом списке с помощью register_toxic
      */
     List *toxic_registry = NIL;
+    
 
     // List *toxic_registry = toxic_registry
     return toxic_registry;
@@ -73,7 +74,7 @@ Datum run(PG_FUNCTION_ARGS)
     else {
         elog(INFO, "%s is not working.", toxic_name);
     }
-    PG_RETURN_VOID();;
+    PG_RETURN_VOID();
 }
 
 Toxic *find_toxic(text toxic_name, List *toxic_registry) {
