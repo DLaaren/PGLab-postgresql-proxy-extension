@@ -51,7 +51,7 @@ Toxic *find_toxic(text toxic_name, List *toxic_registry) {
     ListCell *cell;
     foreach(cell, toxic_registry) {
         Toxic *current_toxic = lfirst(cell);
-        if (strcmp(current_toxic->name, toxic_name.vl_dat) == 0) {
+        if (strcmp(current_toxic->name, toxic_name->vl_dat) == 0) {
             return current_toxic;
         }
     }
@@ -71,7 +71,9 @@ Channel *find_channel(int port) {
     return NULL;
 }
 
-/* Run toxic with toxic_name on channel with some port */
+/* 
+ * Run toxic with toxic_name on channel with some port 
+ */
 Datum run(PG_FUNCTION_ARGS)
 {
     if (PG_ARGISNULL(0)) {
@@ -86,11 +88,11 @@ Datum run(PG_FUNCTION_ARGS)
         PG_RETURN_VOID();
     }
 
-    text toxic_name = PG_GETARG_TEXT_PP(1);
+    text *toxic_name = PG_GETARG_TEXT_PP(1);
     List *toxic_registry = init_toxic_registry();
 
     /* TODO по имени токсика достать указатель на этот токсик */
-    Toxic *toxic = find_toxic(*toxic_name, toxic_registry);
+    Toxic *toxic = find_toxic(toxic_name, toxic_registry);
     if (toxic == NULL) {
         elog(ERROR, "Cannot find toxic %s", toxic_name);
         PG_RETURN_VOID();
@@ -107,5 +109,5 @@ Datum run(PG_FUNCTION_ARGS)
     else {
         elog(INFO, "%s is not working.", toxic_name);
     }
-    PG_RETURN_VOID();;
+    PG_RETURN_VOID();
 }
