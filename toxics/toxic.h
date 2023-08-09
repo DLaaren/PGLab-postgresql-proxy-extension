@@ -10,7 +10,6 @@
 typedef struct {
     char *name; /* type + stream */
     char *type;
-    char *stream; /* upstream (client -> server) or downstream (server -> client) */
     double toxicity;
     int running;
     void (*pipe)(Channel *); /* main toxic function */

@@ -83,6 +83,7 @@ proxy_main(Datum main_arg)
     // init_proxy_settings(&proxy_settings);
 
     BackgroundWorkerUnblockSignals();
+    
     run_proxy();
 }
 
